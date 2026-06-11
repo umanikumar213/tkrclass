@@ -3,162 +3,163 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Attendance · TKR</title>
+<title>ATTENDANCE_//TKR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0a0b14; --ink:#10121f;
-    --indigo:#818cf8; --violet:#a78bfa; --teal:#2dd4bf; --amber:#fbbf24; --coral:#fb7185; --sky:#38bdf8;
-    --glass:rgba(255,255,255,.045); --bd:rgba(255,255,255,.10);
-    --txt:#eef1ff; --muted:#9aa1c9;
+    --bg:#05060a; --panel:rgba(10,14,24,.72);
+    --cyan:#00f0ff; --pink:#ff2bd6; --lime:#a3ff12; --amber:#ffb000; --red:#ff3b5c; --purple:#9b5cff;
+    --bd:rgba(0,240,255,.28); --bd2:rgba(255,43,214,.28);
+    --txt:#d7faff; --muted:#6f86a6;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{min-height:100%}
-  body{font-family:'Inter',system-ui,sans-serif;color:var(--txt);background:var(--bg);overflow-x:hidden;position:relative}
-  .bg{position:fixed;inset:0;z-index:-2;background:
-    radial-gradient(55% 45% at 12% 8%,#1e1b4b 0%,transparent 60%),
-    radial-gradient(50% 40% at 92% 4%,#0b3b3a 0%,transparent 55%),
-    radial-gradient(60% 55% at 50% 100%,#2a1248 0%,transparent 60%),var(--bg)}
-  .orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.5;z-index:-1;animation:float 20s ease-in-out infinite}
-  .orb.a{width:420px;height:420px;background:#6366f1;top:-120px;left:-90px}
-  .orb.b{width:360px;height:360px;background:#14b8a6;bottom:-120px;right:-70px;animation-delay:-7s}
-  .orb.c{width:300px;height:300px;background:#a78bfa;top:42%;left:58%;animation-delay:-13s;opacity:.35}
-  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(38px,-28px) scale(1.07)}66%{transform:translate(-28px,22px) scale(.95)}}
+  body{font-family:'Rajdhani',system-ui,sans-serif;color:var(--txt);background:var(--bg);overflow-x:hidden;position:relative}
+  /* grid + scanline atmosphere */
+  .bg{position:fixed;inset:0;z-index:-3;background:
+    radial-gradient(60% 50% at 18% 6%,#10002e 0%,transparent 60%),
+    radial-gradient(55% 45% at 88% 2%,#00252e 0%,transparent 55%),
+    radial-gradient(60% 60% at 50% 105%,#2a0030 0%,transparent 60%),var(--bg)}
+  .grid{position:fixed;inset:0;z-index:-2;opacity:.16;
+    background-image:linear-gradient(rgba(0,240,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.5) 1px,transparent 1px);
+    background-size:46px 46px;
+    mask-image:radial-gradient(circle at 50% 30%,#000 0%,transparent 75%);-webkit-mask-image:radial-gradient(circle at 50% 30%,#000 0%,transparent 75%)}
+  .scan{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.35;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.0) 0px,rgba(0,0,0,.0) 2px,rgba(0,0,0,.25) 3px,rgba(0,0,0,.0) 4px)}
 
-  .top{padding:26px 20px 6px;text-align:center}
-  .badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:2px;text-transform:uppercase;
-    color:var(--teal);border:1px solid rgba(45,212,191,.3);padding:6px 14px;border-radius:30px;background:rgba(45,212,191,.07)}
-  .top h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;margin-top:14px;
-    background:linear-gradient(90deg,#fff,#a5b4fc 45%,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .top p{color:var(--muted);font-size:13px;margin-top:4px}
+  .top{padding:30px 20px 8px;text-align:center}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:3px;
+    color:var(--cyan);border:1px solid var(--bd);padding:6px 16px;border-radius:2px;background:rgba(0,240,255,.06);text-shadow:0 0 8px var(--cyan)}
+  .top h1{font-family:'Orbitron',sans-serif;font-weight:900;font-size:30px;margin-top:16px;letter-spacing:2px;color:#fff;
+    text-shadow:0 0 10px var(--cyan),0 0 24px rgba(0,240,255,.5)}
+  .top h1 .pk{color:var(--pink);text-shadow:0 0 10px var(--pink),0 0 24px rgba(255,43,214,.5)}
+  .top p{color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:12px;margin-top:6px;letter-spacing:1px}
   .wrap{max-width:760px;margin:0 auto;padding:24px 16px 70px}
 
-  .card{background:var(--glass);border:1px solid var(--bd);border-radius:22px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-    margin-bottom:20px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);opacity:0;transform:translateY(24px);
-    animation:rise .7s cubic-bezier(.2,.8,.2,1) forwards}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:4px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    margin-bottom:20px;overflow:hidden;position:relative;box-shadow:0 0 0 1px rgba(0,240,255,.06),0 16px 50px rgba(0,0,0,.6);
+    opacity:0;transform:translateY(22px);animation:rise .6s cubic-bezier(.2,.8,.2,1) forwards}
+  .card::before{content:"";position:absolute;top:0;left:0;width:36px;height:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .card::after{content:"";position:absolute;top:0;right:0;width:2px;height:36px;background:var(--pink);box-shadow:0 0 10px var(--pink)}
   .card:nth-child(1){animation-delay:.04s}.card:nth-child(2){animation-delay:.1s}.card:nth-child(3){animation-delay:.16s}
   .card:nth-child(4){animation-delay:.22s}.card:nth-child(5){animation-delay:.28s}.card:nth-child(6){animation-delay:.34s}.card:nth-child(7){animation-delay:.4s}
   @keyframes rise{to{opacity:1;transform:none}}
-  .ch{padding:16px 22px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;letter-spacing:.5px;
-    display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.06)}
-  .ch .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 12px var(--teal)}
+  .ch{padding:14px 20px;font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;text-transform:uppercase;
+    display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(0,240,255,.14);color:#bff7ff}
+  .ch .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
 
-  .login{max-width:430px;margin:6vh auto 0}
+  .login{max-width:440px;margin:5vh auto 0}
   .login .inner{padding:34px 30px}
-  .login h2{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;text-align:center;margin-bottom:6px}
-  .login .sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:24px}
-  label{display:block;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-  input{width:100%;padding:14px 16px;font-size:16px;color:#fff;background:rgba(255,255,255,.05);border:1px solid var(--bd);border-radius:14px;outline:none;transition:.25s;font-family:inherit}
-  input:focus{border-color:var(--indigo);box-shadow:0 0 0 4px rgba(129,140,248,.2)}
-  #roll{text-transform:uppercase;letter-spacing:2px}
-  .btn{width:100%;margin-top:18px;padding:15px;border:none;border-radius:14px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:#0a0a18;position:relative;overflow:hidden;
-    background:linear-gradient(100deg,var(--teal),var(--indigo) 55%,var(--violet));background-size:200% 100%;transition:.4s;box-shadow:0 8px 30px rgba(129,140,248,.4)}
-  .btn:hover{background-position:100% 0;transform:translateY(-2px)}
-  .btn:active{transform:translateY(0) scale(.99)}
-  .btn:disabled{opacity:.6;cursor:not-allowed}
-  .err{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13px;display:none;background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.35);color:#fecdd3}
+  .login h2{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:700;text-align:center;letter-spacing:3px;margin-bottom:6px;color:#fff;text-shadow:0 0 10px var(--cyan)}
+  .login .sub{text-align:center;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:12px;margin-bottom:24px}
+  label{display:block;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:8px}
+  input{width:100%;padding:14px 16px;font-size:16px;color:#eafdff;background:rgba(0,240,255,.04);border:1px solid var(--bd);border-radius:3px;outline:none;transition:.2s;font-family:'Share Tech Mono',monospace}
+  input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,240,255,.18),0 0 18px rgba(0,240,255,.25)}
+  #roll{text-transform:uppercase;letter-spacing:3px}
+  .btn{width:100%;margin-top:18px;padding:15px;border:1px solid var(--cyan);border-radius:3px;cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:700;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#02141a;background:var(--cyan);transition:.2s;box-shadow:0 0 20px rgba(0,240,255,.5)}
+  .btn:hover{background:#fff;box-shadow:0 0 30px var(--cyan);transform:translateY(-2px)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .err{margin-top:14px;padding:12px 14px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:13px;display:none;background:rgba(255,59,92,.1);border:1px solid rgba(255,59,92,.4);color:#ffb3c0}
 
-  .stu{padding:22px;display:flex;align-items:center;gap:16px}
-  .ava{width:58px;height:58px;border-radius:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0a0a18;background:linear-gradient(135deg,var(--teal),var(--indigo));box-shadow:0 6px 20px rgba(129,140,248,.45)}
-  .stu .nm{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:600}
-  .stu .rl{color:var(--muted);font-size:13px;letter-spacing:2px;margin-top:3px}
+  .stu{padding:20px;display:flex;align-items:center;gap:16px}
+  .ava{width:58px;height:58px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-weight:900;font-size:18px;color:#02141a;background:linear-gradient(135deg,var(--cyan),var(--pink));box-shadow:0 0 22px rgba(0,240,255,.45)}
+  .stu .nm{font-family:'Orbitron',sans-serif;font-size:19px;font-weight:700;letter-spacing:1px}
+  .stu .rl{color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:2px;margin-top:4px}
 
   /* roast */
   .roast{padding:22px}
-  .roast .body{font-family:'Space Grotesk',sans-serif;font-size:18px;line-height:1.5;font-weight:500;white-space:pre-line}
-  .roast .meta{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .roast .cp{background:rgba(255,255,255,.06);border:1px solid var(--bd);color:var(--txt);border-radius:30px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:.25s}
-  .roast .cp:hover{border-color:var(--amber);background:rgba(251,191,36,.15)}
-  .roast .tag{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+  .roast .body{font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:600;line-height:1.55;white-space:pre-line;text-shadow:0 0 8px rgba(255,43,214,.25)}
+  .roast .meta{margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .roast .cp{background:rgba(255,43,214,.08);border:1px solid var(--bd2);color:#ffc9f3;border-radius:3px;padding:9px 16px;font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:1px;cursor:pointer;transition:.2s}
+  .roast .cp:hover{background:rgba(255,43,214,.2);box-shadow:0 0 16px rgba(255,43,214,.4)}
+  .roast .tag{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--muted)}
 
   .ring-wrap{padding:24px;display:flex;align-items:center;gap:28px;flex-wrap:wrap;justify-content:center}
   .ring{position:relative;width:170px;height:170px;flex-shrink:0}
   .ring svg{transform:rotate(-90deg)}
   .ring .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .ring .ctr b{font-family:'Space Grotesk',sans-serif;font-size:34px;font-weight:700}
-  .ring .ctr span{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:2px}
+  .ring .ctr b{font-family:'Orbitron',sans-serif;font-size:32px;font-weight:900;text-shadow:0 0 14px currentColor}
+  .ring .ctr span{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:3px}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;min-width:250px}
-  .stat{background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:16px;padding:16px 10px;text-align:center}
-  .stat b{font-family:'Space Grotesk',sans-serif;font-size:26px;display:block}
-  .stat span{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
-  .stat.pre b{color:var(--teal)} .stat.abs b{color:var(--coral)}
+  .stat{background:rgba(0,240,255,.04);border:1px solid var(--bd);border-radius:3px;padding:16px 10px;text-align:center}
+  .stat b{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:700;display:block}
+  .stat span{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--muted)}
+  .stat.pre b{color:var(--lime);text-shadow:0 0 10px var(--lime)} .stat.abs b{color:var(--red);text-shadow:0 0 10px var(--red)}
 
-  /* simulator */
-  .sim{padding:6px 22px 22px;border-top:1px solid rgba(255,255,255,.06)}
-  .sim .lab{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin:14px 0 8px}
-  .sim input[type=range]{width:100%;accent-color:var(--indigo)}
-  .sim .proj{margin-top:12px;font-size:14px}
-  .sim .proj b{font-family:'Space Grotesk',sans-serif;font-size:26px;color:var(--teal)}
-  .sim .ex{color:var(--muted);font-size:12px;margin-left:6px}
+  .sim{padding:6px 22px 22px;border-top:1px solid rgba(0,240,255,.12)}
+  .sim .lab{display:flex;justify-content:space-between;align-items:center;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--muted);margin:14px 0 8px;letter-spacing:1px}
+  .sim input[type=range]{width:100%;accent-color:var(--pink)}
+  .sim .proj{margin-top:12px;font-size:15px;font-family:'Rajdhani',sans-serif}
+  .sim .proj b{font-family:'Orbitron',sans-serif;font-size:26px;color:var(--cyan);text-shadow:0 0 12px var(--cyan)}
+  .sim .ex{color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;margin-left:6px}
 
-  .sub-note{padding:4px 22px 0;font-size:12px;color:var(--muted)}
-  .day-h{padding:16px 22px 2px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:16px}
+  .sub-note{padding:4px 22px 0;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:1px}
+  .day-h{padding:16px 22px 2px;font-family:'Orbitron',sans-serif;font-weight:700;font-size:15px;letter-spacing:1px}
   .periods{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:14px 22px 22px}
   @media(max-width:560px){.periods{grid-template-columns:repeat(3,1fr)}}
-  .pcell{border-radius:14px;padding:12px 6px;text-align:center;border:1px solid var(--bd);background:rgba(255,255,255,.03);min-height:64px;display:flex;flex-direction:column;justify-content:center;gap:3px;opacity:0;transform:scale(.85);animation:pop .45s cubic-bezier(.2,1.4,.4,1) forwards}
+  .pcell{border-radius:3px;padding:12px 6px;text-align:center;border:1px solid var(--bd);background:rgba(0,240,255,.03);min-height:64px;display:flex;flex-direction:column;justify-content:center;gap:3px;opacity:0;transform:scale(.85);animation:pop .45s cubic-bezier(.2,1.4,.4,1) forwards}
   @keyframes pop{to{opacity:1;transform:none}}
-  .pcell .pno{font-size:10px;letter-spacing:1px;color:var(--muted)}
-  .pcell .st{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px}
-  .pcell .sb{font-size:10px;color:var(--muted)}
-  .pcell.present{background:rgba(45,212,191,.1);border-color:rgba(45,212,191,.45);box-shadow:0 0 18px rgba(45,212,191,.22) inset}
-  .pcell.present .st{color:var(--teal)}
-  .pcell.absent{background:rgba(251,113,133,.1);border-color:rgba(251,113,133,.45);box-shadow:0 0 18px rgba(251,113,133,.2) inset}
-  .pcell.absent .st{color:var(--coral)}
-  .pcell.dash .st{color:#565b80}
+  .pcell .pno{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted)}
+  .pcell .st{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px}
+  .pcell .sb{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted)}
+  .pcell.present{background:rgba(163,255,18,.08);border-color:rgba(163,255,18,.5);box-shadow:0 0 18px rgba(163,255,18,.2) inset}
+  .pcell.present .st{color:var(--lime);text-shadow:0 0 8px var(--lime)}
+  .pcell.absent{background:rgba(255,59,92,.1);border-color:rgba(255,59,92,.5);box-shadow:0 0 18px rgba(255,59,92,.2) inset}
+  .pcell.absent .st{color:var(--red);text-shadow:0 0 8px var(--red)}
+  .pcell.dash .st{color:#3c4a63}
 
   .calc{padding:22px}
   .calc .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
   .calc .fld{flex:1;min-width:130px}
-  .calc input{text-transform:none;letter-spacing:0}
-  .go{padding:14px 22px;border:none;border-radius:14px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#0a0a18;background:linear-gradient(100deg,var(--indigo),var(--violet));box-shadow:0 6px 20px rgba(167,139,250,.35);transition:.3s}
-  .go:hover{transform:translateY(-2px)}
+  .calc input{letter-spacing:0}
+  .go{padding:14px 22px;border:1px solid var(--pink);border-radius:3px;cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#1a0014;background:var(--pink);box-shadow:0 0 18px rgba(255,43,214,.45);transition:.2s}
+  .go:hover{background:#fff;box-shadow:0 0 28px var(--pink);transform:translateY(-2px)}
   .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-  .preset{background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--txt);border-radius:30px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:.25s;font-family:'Space Grotesk',sans-serif}
-  .preset:hover{border-color:var(--indigo);background:rgba(129,140,248,.18)}
-  .out{margin-top:18px;padding:18px;border-radius:16px;background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.3);font-size:14px;line-height:1.6;display:none}
-  .out .big{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:700;background:linear-gradient(90deg,var(--teal),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .out .days{display:block;margin-top:6px;color:var(--muted);font-size:13px}
+  .preset{background:rgba(0,240,255,.05);border:1px solid var(--bd);color:var(--cyan);border-radius:3px;padding:8px 16px;font-family:'Share Tech Mono',monospace;font-size:12px;cursor:pointer;transition:.2s}
+  .preset:hover{background:rgba(0,240,255,.18);box-shadow:0 0 14px rgba(0,240,255,.35)}
+  .out{margin-top:18px;padding:18px;border-radius:3px;background:rgba(155,92,255,.08);border:1px solid rgba(155,92,255,.35);font-size:15px;line-height:1.6;display:none;font-family:'Rajdhani',sans-serif}
+  .out .big{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:var(--cyan);text-shadow:0 0 12px var(--cyan)}
+  .out .days{display:block;margin-top:6px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:12px}
 
-  /* bunk */
   .bunk{padding:18px 22px 22px}
-  .bunk .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-  .brow{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--bd);margin-bottom:8px}
-  .brow .l{font-size:14px}
-  .brow .r{font-family:'Space Grotesk',sans-serif;font-weight:600}
-  .brow .r small{color:var(--muted);font-weight:400;margin-left:6px}
+  .brow{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:3px;background:rgba(255,59,92,.05);border:1px solid rgba(255,59,92,.22);margin-bottom:8px}
+  .brow .l{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600}
+  .brow .r{font-family:'Orbitron',sans-serif;font-weight:700}
+  .brow .r small{color:var(--muted);font-weight:400;margin-left:6px;font-family:'Share Tech Mono',monospace}
 
   .subj{padding:10px 22px 18px}
-  .srow{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .srow{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(0,240,255,.08)}
   .srow:last-child{border-bottom:none}
-  .srow .nm{font-family:'Space Grotesk',sans-serif;font-weight:600;width:90px;flex-shrink:0}
-  .srow .bar{flex:1;height:8px;border-radius:8px;background:rgba(255,255,255,.07);overflow:hidden}
-  .srow .bar i{display:block;height:100%;border-radius:8px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1)}
-  .srow .val{width:96px;text-align:right;font-size:13px;font-family:'Space Grotesk',sans-serif;font-weight:600}
-  .ok{color:var(--teal)} .lo{color:var(--coral)}
+  .srow .nm{font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;width:96px;flex-shrink:0}
+  .srow .bar{flex:1;height:8px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden}
+  .srow .bar i{display:block;height:100%;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 10px currentColor}
+  .srow .val{width:96px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:13px}
+  .ok{color:var(--lime)} .lo{color:var(--red)}
 
-  .back{display:block;margin:8px auto 0;padding:13px 26px;border:1px solid var(--bd);background:rgba(255,255,255,.05);color:var(--txt);border-radius:14px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:600;transition:.25s}
-  .back:hover{border-color:var(--coral);background:rgba(251,113,133,.12)}
+  .back{display:block;margin:8px auto 0;padding:13px 26px;border:1px solid var(--bd);background:rgba(0,240,255,.05);color:var(--cyan);border-radius:3px;cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;text-transform:uppercase;transition:.2s}
+  .back:hover{border-color:var(--pink);color:var(--pink);box-shadow:0 0 16px rgba(255,43,214,.3)}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div class="bg"></div><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
+<div class="bg"></div><div class="grid"></div><div class="scan"></div>
 
 <div class="top">
-  <span class="badge"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block"></span> TKR · Live</span>
-  <h1>Attendance Dashboard</h1>
-  <p>Track your attendance · know exactly where you stand</p>
+  <span class="badge">// SYSTEM ONLINE</span>
+  <h1>ATTENDANCE<span class="pk">_//</span>TKR</h1>
+  <p>&gt; tracking_protocol initialized · know where you stand</p>
 </div>
 
 <div class="wrap">
   <div class="card login" id="loginBox"><div class="inner">
-    <h2>Sign in</h2>
-    <div class="sub">Enter your roll number to continue</div>
+    <h2>ACCESS</h2>
+    <div class="sub">&gt; enter roll number to authenticate</div>
     <label for="roll">Roll Number</label>
-    <input id="roll" placeholder="24K95A6718" autocomplete="off" />
-    <button class="btn" id="btn" onclick="go()">View my attendance →</button>
+    <input id="roll" placeholder="Enter Roll Number" autocomplete="off" />
+    <button class="btn" id="btn" onclick="go()">RUN ATTENDANCE //</button>
     <div class="err" id="err"></div>
   </div></div>
 
@@ -171,17 +172,17 @@
     <div class="card" id="latestCard">
       <div class="ch"><span class="dot"></span> Latest attendance</div>
       <div class="day-h" id="dayHead">—</div>
-      <div class="sub-note">Teal = present · Coral = absent · — = not marked yet</div>
+      <div class="sub-note">LIME = present · RED = absent · — = not marked</div>
       <div class="periods" id="periods"></div>
     </div>
 
     <div class="card">
-      <div class="ch"><span class="dot" style="background:var(--amber);box-shadow:0 0 12px var(--amber)"></span> Daily roast 🔥</div>
+      <div class="ch"><span class="dot" style="background:var(--pink);box-shadow:0 0 12px var(--pink)"></span> Daily Dose //</div>
       <div class="roast">
         <div class="body" id="roastBody">—</div>
         <div class="meta">
-          <button class="cp" id="cpBtn" onclick="copyRoast()">Copy roast</button>
-          <span class="tag">changes every day</span>
+          <button class="cp" id="cpBtn" onclick="copyRoast()">COPY</button>
+          <span class="tag">// rerolls every day</span>
         </div>
       </div>
     </div>
@@ -192,11 +193,11 @@
         <div class="ring">
           <svg width="170" height="170" viewBox="0 0 170 170">
             <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#818cf8"/></linearGradient></defs>
+              <stop offset="0" stop-color="#00f0ff"/><stop offset="1" stop-color="#ff2bd6"/></linearGradient></defs>
             <circle cx="85" cy="85" r="70" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>
             <circle id="prog" cx="85" cy="85" r="70" fill="none" stroke="url(#g)" stroke-width="14"
               stroke-linecap="round" stroke-dasharray="439.8" stroke-dashoffset="439.8"
-              style="transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 0 8px rgba(45,212,191,.6))"/>
+              style="transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 0 10px rgba(0,240,255,.7))"/>
           </svg>
           <div class="ctr"><b id="pct">0%</b><span>overall</span></div>
         </div>
@@ -207,9 +208,9 @@
         </div>
       </div>
       <div class="sim">
-        <div class="lab"><span>Simulator — attend more classes</span><span id="simN">+0 classes</span></div>
+        <div class="lab"><span>&gt; SIMULATE: attend more</span><span id="simN">+0 classes</span></div>
         <input type="range" id="simRange" min="0" max="60" value="0" step="1" oninput="sim()" />
-        <div class="proj">If you attend them all: <b id="simPct">~0%</b><span class="ex" id="simEx"></span></div>
+        <div class="proj">projected: <b id="simPct">~0%</b><span class="ex" id="simEx"></span></div>
       </div>
     </div>
 
@@ -218,8 +219,8 @@
       <div class="calc">
         <div class="row">
           <div class="fld"><label for="target">Target %</label>
-            <input id="target" type="number" min="1" max="99" placeholder="e.g. 75" /></div>
-          <button class="go" onclick="calc()">Calculate</button>
+            <input id="target" type="number" min="1" max="99" placeholder="75" /></div>
+          <button class="go" onclick="calc()">CALC</button>
         </div>
         <div class="presets">
           <button class="preset" onclick="quick(50)">50%</button>
@@ -232,9 +233,9 @@
     </div>
 
     <div class="card">
-      <div class="ch"><span class="dot" style="background:var(--coral);box-shadow:0 0 12px var(--coral)"></span> Bunk calculator</div>
+      <div class="ch"><span class="dot" style="background:var(--red);box-shadow:0 0 12px var(--red)"></span> Bunk calculator //</div>
       <div class="bunk">
-        <div class="sub-note" style="padding:0 0 6px">If you skip classes, here's where your attendance lands (1 day = 6 classes):</div>
+        <div class="sub-note" style="padding:0 0 8px">&gt; if you skip [1 day = 6 classes]</div>
         <div id="bunkRows"></div>
       </div>
     </div>
@@ -244,91 +245,100 @@
       <div class="subj" id="subj"></div>
     </div>
 
-    <button class="back" onclick="logout()">← Check another</button>
+    <button class="back" onclick="logout()">&lt; LOGOUT</button>
   </div>
 </div>
 
 <script>
 let DATA=null; const CIRC=439.8;
 
-/* ---------- ROAST ENGINE (deterministic by roll + date) ---------- */
 const OPENERS=[
- "Bro...","Breaking news 📰","Scientists are baffled.","Attention, everyone.","Congratulations 🎉",
- "Plot twist:","Honestly?","Not gonna lie,","Update:","Dear student,",
- "We need to talk.","Fun fact:","Legend says","Reports confirm","Hot take:"
-];
+ "Bro...","// BREAKING","Scientists are baffled.","Attention, citizen.","Congrats 🎉","Plot twist:","Honestly?","Not gonna lie,",
+ "// SYSTEM ALERT","Dear student,","We need to talk.","Fun fact:","Legend says","Reports confirm","Hot take:","Yo.","Update logged:","Status report:",
+ "// INTRUDER DETECTED","Breaking the silence:","Real talk:","Quick PSA:"];
 const ENDINGS=[
- "Respect the consistency, somehow.","Even the teachers are confused.","History will not forget this.",
- "Nobody saw it coming. Nobody at all.","The chair misses you.","Touch grass, then touch the classroom.",
- "Anyway, no pressure. (Lots of pressure.)","This was a public service announcement.","Screenshot it. Frame it.",
- "The WiFi has more presence than you.","Your future self is taking notes.","And that's the tea. 🍵",
- "Choose violence — attend a class.","Be the legend the canteen deserves.","Numbers don't lie. You might."
-];
+ "Respect the consistency, somehow.","Even the professors are confused.","History will not forget this.","Nobody saw it coming. Nobody.",
+ "The chair misses you.","Touch grass, then the classroom.","No pressure. (Lots of pressure.)","Screenshot it. Frame it.","The WiFi has more presence than you.",
+ "Your future self took notes.","And that's the tea. 🍵","Choose violence — attend a class.","Numbers don't lie. You might.","This is canon now.",
+ "Mainframe says skill issue.","Buffering... like your motivation.","404: discipline not found.","Anyway, slay or stay home.","The register wept.","Certified moment.",
+ "Cope, then commute to college.","NPC behavior, frankly."];
 const BODIES=[
- /* tier 0: 0-25% — legendary */
- ["the college genuinely thinks you dropped out.","you treat attendance like it's a myth told to scare juniors.",
-  "the security guard asks for your ID because he's never seen you alive.","your roll number is basically a missing-person case now.",
-  "you've attended fewer classes than the number of WiFi bars on campus.","the classroom filed for emotional damages.",
-  "you appear on campus like a solar eclipse — rare and briefly.","your attendance graph flatlined; somebody call a doctor.",
-  "professors mark you absent out of pure habit at this point.","you're not enrolled, you're a rumor.",
-  "even online classes you attended in spirit only.","your bench has been declared a protected historical site."],
- /* tier 1: 25-50% — barely existing */
- ["you show up just enough to confirm you're alive.","attendance for you is a part-time hobby, not a commitment.",
-  "you appear, sign, and vanish like a magician.","you're playing attendance on hard mode and losing.",
-  "the register knows your name but not your face.","you come to college like it's an optional side quest.",
-  "your attendance is held together with hope and last-bench energy.","you treat 50% like a finish line, not a warning.",
-  "you've mastered the art of being technically a student.","you visit class the way relatives visit — rarely and unannounced."],
- /* tier 2: 50-75% — living dangerously */
- ["you're one bad week away from a detention notice.","you live on the edge — and the edge is the 65% rule.",
-  "your attendance does cardio: up a little, down a little, panic.","you're gambling with the percentage and the house always wins.",
-  "you attend exactly enough to argue with the system later.","you're in the danger zone and acting like it's a comfort zone.",
-  "one more bunk and the warning letter writes itself.","you treat the cutoff like a suggestion, not a rule.",
-  "you're surviving on technicalities and vibes.","your attendance is a thriller — nobody knows how it ends."],
- /* tier 3: 75-90% — trying a bit too hard */
- ["look at you, almost a model student. almost.","you attend enough to lecture others, the audacity.",
-  "you're that person who reminds the teacher about homework.","safe attendance, zero personality risk. bold strategy.",
-  "you show up so much the fan recognizes you.","you're basically furniture in that classroom now.",
-  "high attendance, still complaining — classic.","you came for knowledge and stayed for the free AC.",
-  "you're the reason the 'mark proxy' messages exist.","responsible? in this economy? embarrassing."],
- /* tier 4: 90-100% — too dedicated */
- ["the principal thinks you're faculty at this point.","you attend college like there's a loyalty rewards program.",
-  "your attendance is so high it needs its own NIRF ranking.","you haven't missed a class — are you okay? blink twice.",
-  "the canteen forgot what you look like, the classroom didn't.","you're not a student, you're an attendance machine.",
-  "even the teacher takes a day off before you do.","you've turned showing up into a personality.",
-  "you attend classes that got cancelled. seek help (and a break).","100% present, 0% chill. legendary, slightly worrying."]
+ /* tier0 0-25 LEGENDARY */
+ ["the college genuinely thinks you dropped out.","you treat attendance like a myth told to scare juniors.","the guard asks for ID because he's never seen you alive.",
+  "your roll number is basically a missing-person case.","you've attended fewer classes than there are WiFi bars.","the classroom filed for emotional damages.",
+  "you appear on campus like a solar eclipse — rare and brief.","your attendance graph flatlined; call a medic.","professors mark you absent out of pure muscle memory.",
+  "you're not enrolled, you're a rumor with a roll number.","even online classes, you attended in spirit only.","your bench is now a protected heritage site.",
+  "Google Maps marked your seat 'permanently closed'.","attendance.exe has stopped responding.","you ghosted college harder than your situationship.",
+  "the biometric scanner forgot your fingerprint.","you're speedrunning a backlog, any% category.","your presence is a limited-edition drop.",
+  "the syllabus and you have never met in person.","you treat college like a haunted house — enter never.","you've unlocked 'invisible student' achievement.",
+  "the timetable has more attendance than you.","you came once and the whole class clapped.","NASA tracks objects more often than your attendance.",
+  "your name in the register is just decorative.","you're the final boss of bunking.","attendance left on read, every single day."],
+ /* tier1 25-50 BARELY EXISTING */
+ ["you show up just enough to prove you're alive.","attendance is a part-time hobby for you, not a job.","you appear, sign, and vanish like a street magician.",
+  "you're playing attendance on hard mode and losing.","the register knows your name, not your face.","college is an optional side quest you rarely accept.",
+  "your attendance runs on hope and last-bench energy.","you treat 50% like a finish line, not a red flag.","you've mastered being 'technically a student'.",
+  "you visit class like a distant relative — rare, unannounced.","half present, fully confused — iconic.","you attend on days that start with a vibe, not a schedule.",
+  "your motivation has worse uptime than the college server.","you clock in like it's an inconvenient cameo.","you're the human equivalent of 'seen 2 days ago'.",
+  "you negotiate with the percentage like it owes you.","you show up to confirm the building still exists.","you treat lectures like ads — skippable in 5 seconds.",
+  "your attendance is in 'free trial expiring soon' mode.","you appear, the class double-takes, you're gone.","you're enrolled in vibes, minoring in absence.",
+  "your seat is on a permanent lunch break.","you collect absents like loyalty points.","you treat the gate like a turnstile you barely use.",
+  "you're buffering between 'student' and 'visitor'.","attendance? you do it ironically."],
+ /* tier2 50-75 LIVING DANGEROUSLY */
+ ["you're one bad week from a detention notice.","you live on the edge and the edge is the 65% rule.","your attendance does cardio: up, down, panic.",
+  "you're gambling with the percentage; the house wins.","you attend just enough to argue with the system later.","danger zone resident, acting like it's a comfort zone.",
+  "one more bunk and the warning letter writes itself.","you treat the cutoff as a suggestion, not a law.","you survive on technicalities and pure vibes.",
+  "your attendance is a thriller — nobody knows the ending.","you're speedrunning toward 'condonation fee'.","you balance on 65% like it's a tightrope over lava.",
+  "your margin for error is thinner than the WiFi signal.","you flirt with the danger line every single week.","you're playing Jenga with your own attendance.",
+  "you treat every class like optional DLC you might buy.","your percentage has trust issues, and it's your fault.","you're one fever away from a re-registration.",
+  "you live that 'main character risks it all' arc.","the cutoff and you are in a toxic relationship.","you're rationing presence like it's wartime.",
+  "your attendance status: 'it's complicated'.","you ride the 65% line like a hoverboard.","you're a coin flip away from a parent meeting.",
+  "you treat safe attendance like a dare.","you keep college on read but reply just in time."],
+ /* tier3 75-90 TRY-HARD */
+ ["look at you — almost a model student. almost.","you attend enough to lecture others, the audacity.","you're the one reminding the teacher about homework.",
+  "safe attendance, zero risk, bold and boring strategy.","you show up so often the fan recognizes you.","you're basically classroom furniture now.",
+  "high attendance and still complaining — classic.","you came for knowledge, stayed for the free AC.","you're the reason 'mark my proxy' texts exist.",
+  "responsible behavior? in this economy? embarrassing.","you peaked at 'never misses first period'.","you treat 85% like it's a personality trait.",
+  "you attend like there's a participation trophy.","you're the human attendance backup server.","you've gentrified the front bench.",
+  "you do the readings. on time. weirdo.","you're suspiciously on track. relax a little.","your attendance is the group project carrying everyone.",
+  "you set the curve and the class resents it.","you're the 'reply-all' of attendance.","teacher's unofficial assistant, unpaid and proud.",
+  "you treat bunking like a forbidden ritual.","you're almost perfect, which is almost annoying.","you log in early like the server depends on it.",
+  "you're the 'well, actually' of the attendance sheet.","you color inside the lines, every line."],
+ /* tier4 90-100 TOO DEDICATED */
+ ["the principal thinks you're faculty at this point.","you attend like there's a loyalty rewards program.","your attendance needs its own NIRF ranking.",
+  "you haven't missed a class — blink twice if you're okay.","the canteen forgot your face, the classroom didn't.","you're not a student, you're an attendance machine.",
+  "even the teacher takes a day off before you do.","you've turned 'showing up' into a whole personality.","you attended a cancelled class. seek help (and rest).",
+  "100% present, 0% chill — legendary, slightly worrying.","you'd attend on a national holiday if allowed.","your seat has your name carved into it by now.",
+  "you treat sick days as a personal failure.","you're the perfect-attendance villain origin story.","you out-attend the cleaning staff.",
+  "the biometric greets you like an old friend.","you've never seen the 'absent' color in your life.","you'd attend your own day off.",
+  "you set alarms to be early to early.","the timetable consults YOU.","you're the reason the register feels validated.",
+  "you attend so hard it loops back to a flex.","you're basically the building's emergency backup student.","perfect record, questionable work-life balance.",
+  "you treat a free period like a personal insult.","you're one step from teaching the class yourself."]
 ];
-function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 function tierOf(p){return p<25?0:p<50?1:p<75?2:p<90?3:4;}
 function buildRoast(roll,pct){
-  const day=new Date().toISOString().slice(0,10);
-  const seed=(roll||'x')+'|'+day;
-  const t=tierOf(pct);
+  const day=new Date().toISOString().slice(0,10);const seed=(roll||'x')+'|'+day;const t=tierOf(pct);
   const o=OPENERS[hash(seed+'o')%OPENERS.length];
   const b=BODIES[t][hash(seed+'b')%BODIES[t].length];
   const e=ENDINGS[hash(seed+'e')%ENDINGS.length];
   return o+"\nYou "+b+"\n"+e;
 }
-function copyRoast(){
-  const txt=document.getElementById('roastBody').textContent;
-  navigator.clipboard?.writeText(txt).then(()=>{const b=document.getElementById('cpBtn');b.textContent='Copied!';setTimeout(()=>b.textContent='Copy roast',1500);});
-}
+function copyRoast(){const txt=document.getElementById('roastBody').textContent;
+  navigator.clipboard?.writeText(txt).then(()=>{const b=document.getElementById('cpBtn');b.textContent='COPIED';setTimeout(()=>b.textContent='COPY',1500);});}
 
 async function go(){
   const roll=document.getElementById('roll').value.trim();
   const btn=document.getElementById('btn'),err=document.getElementById('err');
   err.style.display='none';
-  if(!roll){err.style.display='block';err.textContent='Please enter your roll number.';return;}
-  btn.disabled=true;btn.textContent='Loading…';
+  if(!roll){err.style.display='block';err.textContent='> roll number required.';return;}
+  btn.disabled=true;btn.textContent='CONNECTING…';
   try{
     const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rollNumber:roll})});
     const d=await r.json();
-    btn.disabled=false;btn.textContent='View my attendance →';
-    if(!d.success){err.style.display='block';err.textContent='⚠ '+d.message;return;}
+    btn.disabled=false;btn.textContent='RUN ATTENDANCE //';
+    if(!d.success){err.style.display='block';err.textContent='> '+d.message;return;}
     DATA=d;render(d);
-  }catch(e){
-    btn.disabled=false;btn.textContent='View my attendance →';
-    err.style.display='block';err.textContent='⚠ Cannot reach server. Try again.';
-  }
+  }catch(e){btn.disabled=false;btn.textContent='RUN ATTENDANCE //';err.style.display='block';err.textContent='> connection failed. retry.';}
 }
 function initials(n){return (n||'').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()||'?';}
 function round5(x){return Math.round(x/5)*5;}
@@ -339,16 +349,12 @@ function render(d){
   document.getElementById('nm').textContent=d.name||'—';
   document.getElementById('rl').textContent=d.rollNo||'—';
   document.getElementById('ava').textContent=initials(d.name);
-
   const pct=parseFloat(d.overall||(d.summary&&d.summary.percentage)||0)||0;
-
-  // roast
   document.getElementById('roastBody').textContent=buildRoast(d.rollNo||d.name||'x',pct);
 
-  // latest day
   const lc=document.getElementById('latestCard');
   if(d.latestDay&&d.latestDay.periods){
-    document.getElementById('dayHead').textContent=d.latestDay.date+'  ·  '+d.latestDay.weekday;
+    document.getElementById('dayHead').textContent='> '+d.latestDay.date+'  ::  '+d.latestDay.weekday;
     document.getElementById('periods').innerHTML=d.latestDay.periods.map((p,i)=>{
       const lbl=p.status==='present'?'Present':p.status==='absent'?'Absent':'—';
       const sb=p.subject?`<div class="sb">${p.subject}</div>`:'';
@@ -356,93 +362,59 @@ function render(d){
     }).join('');
   }else{lc.style.display='none';}
 
-  // ring + counts
   const prog=document.getElementById('prog');
   setTimeout(()=>{prog.style.strokeDashoffset=CIRC*(1-pct/100);},150);
-  countUp(document.getElementById('pct'),pct,'%');
-  const col=pct<65?'#fb7185':(pct<75?'#fbbf24':'#2dd4bf');
-  prog.setAttribute('stroke',col);prog.style.filter=`drop-shadow(0 0 8px ${col})`;
-  if(d.summary){
-    countUp(document.getElementById('sCon'),d.summary.conducted,'');
-    countUp(document.getElementById('sPre'),d.summary.present,'');
-    countUp(document.getElementById('sAbs'),d.summary.absent,'');
-  }
+  const ctrB=document.getElementById('pct');countUp(ctrB,pct,'%');
+  const col=pct<65?'#ff3b5c':(pct<75?'#ffb000':'#a3ff12');
+  prog.setAttribute('stroke',col);prog.style.filter=`drop-shadow(0 0 10px ${col})`;ctrB.style.color=col;
+  if(d.summary){countUp(document.getElementById('sCon'),d.summary.conducted,'');countUp(document.getElementById('sPre'),d.summary.present,'');countUp(document.getElementById('sAbs'),d.summary.absent,'');}
+  if(d.summary){sim();buildBunk();}
 
-  // simulator + bunk need summary
-  if(d.summary){ sim(); buildBunk(); }
-
-  // subjects
   const s=document.getElementById('subj');
   if(d.perSubject&&d.perSubject.length){
     s.innerHTML=d.perSubject.map(x=>{
-      const [a,h]=(x.attended||'').split('/').map(Number);
-      const p=h?Math.round(a/h*100):null;
-      const cls=p===null?'':(p<65?'lo':'ok');
-      const barc=p===null?'#565b80':(p<65?'#fb7185':(p<75?'#fbbf24':'#2dd4bf'));
-      return `<div class="srow"><div class="nm">${x.subject}</div>
-        <div class="bar"><i data-w="${p||0}" style="background:${barc}"></i></div>
-        <div class="val ${cls}">${x.attended}${p!==null?` · ${p}%`:''}</div></div>`;
+      const [a,h]=(x.attended||'').split('/').map(Number);const p=h?Math.round(a/h*100):null;
+      const cls=p===null?'':(p<65?'lo':'ok');const barc=p===null?'#3c4a63':(p<65?'#ff3b5c':(p<75?'#ffb000':'#a3ff12'));
+      return `<div class="srow"><div class="nm">${x.subject}</div><div class="bar"><i data-w="${p||0}" style="background:${barc};color:${barc}"></i></div><div class="val ${cls}">${x.attended}${p!==null?` · ${p}%`:''}</div></div>`;
     }).join('');
     setTimeout(()=>document.querySelectorAll('.srow .bar i').forEach(b=>b.style.width=b.dataset.w+'%'),250);
   }else{document.getElementById('subjCard').style.display='none';}
 }
-
 function sim(){
   if(!DATA||!DATA.summary)return;
-  const n=parseInt(document.getElementById('simRange').value,10);
-  const C=DATA.summary.conducted,P=DATA.summary.present;
+  const n=parseInt(document.getElementById('simRange').value,10);const C=DATA.summary.conducted,P=DATA.summary.present;
   const proj=(C+n)?((P+n)/(C+n)*100):0;
   document.getElementById('simN').textContent='+'+n+' class'+(n===1?'':'es');
-  document.getElementById('simPct').textContent='~'+round5(proj)+'%';
-  document.getElementById('simEx').textContent='(exact '+proj.toFixed(2)+'%)';
+  document.getElementById('simPct').textContent=proj.toFixed(2)+'%';
+  document.getElementById('simEx').textContent='// '+P+'+'+n+' / '+C+'+'+n;
 }
-
 function buildBunk(){
   const C=DATA.summary.conducted,P=DATA.summary.present;
-  const scenarios=[['Miss 1 class',1],['Miss 1 day (6)',6],['Miss 2 days (12)',12]];
-  document.getElementById('bunkRows').innerHTML=scenarios.map(([label,miss])=>{
-    const after=(C+miss)?(P/(C+miss)*100):0;
-    const drop=(P/C*100)-after;
-    const col=after<65?'#fb7185':(after<75?'#fbbf24':'#2dd4bf');
-    return `<div class="brow"><div class="l">${label}</div>
-      <div class="r" style="color:${col}">${after.toFixed(2)}% <small>↓ ${drop.toFixed(2)}%</small></div></div>`;
+  const sc=[['Miss 1 class',1],['Miss 1 day [6]',6],['Miss 2 days [12]',12]];
+  document.getElementById('bunkRows').innerHTML=sc.map(([label,miss])=>{
+    const after=(C+miss)?(P/(C+miss)*100):0;const drop=(P/C*100)-after;
+    const col=after<65?'#ff3b5c':(after<75?'#ffb000':'#a3ff12');
+    return `<div class="brow"><div class="l">${label}</div><div class="r" style="color:${col};text-shadow:0 0 8px ${col}">${after.toFixed(2)}% <small>↓ ${drop.toFixed(2)}%</small></div></div>`;
   }).join('');
 }
-
-function countUp(el,to,suf){
-  const dur=1100,st=performance.now();const dec=(suf==='%'&&to%1!==0)?2:0;
-  function step(t){const k=Math.min(1,(t-st)/dur);const e=1-Math.pow(1-k,3);
-    el.textContent=(to*e).toFixed(dec)+suf;if(k<1)requestAnimationFrame(step);else el.textContent=to.toFixed(dec)+suf;}
-  requestAnimationFrame(step);
-}
+function countUp(el,to,suf){const dur=1100,st=performance.now();const dec=(suf==='%'&&to%1!==0)?2:0;
+  function step(t){const k=Math.min(1,(t-st)/dur);const e=1-Math.pow(1-k,3);el.textContent=(to*e).toFixed(dec)+suf;if(k<1)requestAnimationFrame(step);else el.textContent=to.toFixed(dec)+suf;}
+  requestAnimationFrame(step);}
 function quick(v){document.getElementById('target').value=v;calc();}
 function calc(){
-  const out=document.getElementById('out');
-  const t=parseFloat(document.getElementById('target').value);
+  const out=document.getElementById('out');const t=parseFloat(document.getElementById('target').value);
   if(!DATA||!DATA.summary)return;
-  if(!(t>0&&t<100)){out.style.display='block';out.innerHTML='Enter a target between 1 and 99.';return;}
-  const C=DATA.summary.conducted,P=DATA.summary.present;const cur=C?(P/C*100):0;
-  out.style.display='block';
-  if(cur>=t){
-    const skip=Math.max(0,Math.floor((100*P-t*C)/t));
-    out.innerHTML=`You're at <b>${cur.toFixed(2)}%</b> — already above ${t}% ✨<br>
-      You can miss <span class="big">${skip}</span> more class(es) and stay at ${t}%.
-      <span class="days">≈ ${Math.floor(skip/6)} day(s) off (at 6 classes/day)</span>`;
-  }else{
-    const need=Math.ceil((t*C-100*P)/(100-t));
-    out.innerHTML=`You're at <b>${cur.toFixed(2)}%</b>. To hit ${t}% attend the next<br>
-      <span class="big">${need}</span> class(es) without missing any.
-      <span class="days">≈ ${Math.ceil(need/6)} full day(s) of college (at 6 classes/day)</span>`;
-  }
+  if(!(t>0&&t<100)){out.style.display='block';out.innerHTML='&gt; enter target 1–99.';return;}
+  const C=DATA.summary.conducted,P=DATA.summary.present;const cur=C?(P/C*100):0;out.style.display='block';
+  if(cur>=t){const skip=Math.max(0,Math.floor((100*P-t*C)/t));
+    out.innerHTML=`At <b>${cur.toFixed(2)}%</b> — above ${t}% ✓<br>You can miss <span class="big">${skip}</span> more class(es) and hold ${t}%.<span class="days">≈ ${Math.floor(skip/6)} day(s) off [6 classes/day]</span>`;
+  }else{const need=Math.ceil((t*C-100*P)/(100-t));
+    out.innerHTML=`At <b>${cur.toFixed(2)}%</b>. To hit ${t}% attend the next<br><span class="big">${need}</span> class(es) without missing.<span class="days">≈ ${Math.ceil(need/6)} full day(s) [6 classes/day]</span>`;}
 }
 function logout(){
-  document.getElementById('result').style.display='none';
-  document.getElementById('loginBox').style.display='block';
-  document.getElementById('roll').value='';
-  document.getElementById('out').style.display='none';
-  document.getElementById('prog').style.strokeDashoffset=CIRC;
-  document.getElementById('simRange').value=0;
-  DATA=null;
+  document.getElementById('result').style.display='none';document.getElementById('loginBox').style.display='block';
+  document.getElementById('roll').value='';document.getElementById('out').style.display='none';
+  document.getElementById('prog').style.strokeDashoffset=CIRC;document.getElementById('simRange').value=0;DATA=null;
 }
 document.getElementById('roll').addEventListener('keypress',e=>{if(e.key==='Enter')go();});
 </script>
