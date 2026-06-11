@@ -241,7 +241,7 @@ async function go(){
   if(!roll){err.style.display='block';err.textContent='Please enter your roll number.';return;}
   btn.disabled=true;btn.textContent='Loading…';
   try{
-    const r=await fetch('http://localhost:3000/login',{method:'POST',
+    const r=await fetch('/login',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({rollNumber:roll})});
     const d=await r.json();
     btn.disabled=false;btn.textContent='View my attendance →';
