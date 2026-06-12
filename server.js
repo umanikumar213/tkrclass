@@ -68,9 +68,16 @@ app.post('/login', async (req, res) => {
 
     // Step 3: follow redirect to the frameset
     let mainUrl = afterUrl, mainHtml = String(loginRes.data);
+
+    // Portal rejects wrong credentials with an "Invalid Details" alert.
+    if (/invalid\s*details/i.test(mainHtml)) {
+      console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → invalid details`);
+      return res.json({ success: false, message: 'Invalid details. Please check your roll number.' });
+    }
+
     const hasRedirectScript = /document\.location|location\.href|location\.replace|location\s*=|http-equiv=["']?refresh/i.test(mainHtml);
     if (!hasRedirectScript && /name=["']password["']/i.test(mainHtml) && /Login to Academic Activity Portal/i.test(mainHtml)) {
-      return res.json({ success: false, message: 'Login was rejected — check the roll number / password.' });
+      return res.json({ success: false, message: 'Invalid details. Please check your roll number.' });
     }
     const findRedirect = (html, base) => {
       let m = html.match(/http-equiv=["']?refresh["']?[^>]*content=["'][^"']*url=([^"'>\s]+)/i);
