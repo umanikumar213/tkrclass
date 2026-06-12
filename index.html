@@ -157,12 +157,12 @@
   <header>
     <div class="eyebrow">TKR College of Engineering &amp; Technology</div>
     <h1>MYTKR.in</h1>
-    <div class="tagline">Designed by Backbenchers, dedicated to every attendance warrior who ever said — “Bro, attendance entha?” 😁❤️</div>
+    <h2 class="tagline" id="tagline">Designed by Backbenchers, dedicated to every attendance warrior who ever said — “Bro, attendance entha?” 😁❤️</h2>
   </header>
 
   <div class="card login" id="loginBox"><div class="pad">
-    <h2>Sign in</h2>
-    <div class="hint">Your roll number is your username.</div>
+    <h2>Attendance</h2>
+    <div class="hint">Bunk mundhu Attendance check chesko mawa, Lekpothei Kotha Building Sponsor Nuvei 💸</div>
     <label for="roll">Roll number</label>
     <input id="roll" placeholder="Enter Your Roll Number" autocomplete="off" />
     <button class="btn" id="btn" onclick="go()">View attendance</button>
@@ -197,7 +197,7 @@
       <div class="hours" id="hoursBox">
         <span class="h-ico">⏱️</span>
         <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins in college
-          <small>1 class = 1 hour · plus ~40 min lunch each day you attended</small></div>
+          <small><b id="totalMinsN">0</b> minutes total spent in college</small></div>
       </div>
       <div class="sim">
         <div class="row"><span>Simulate attending more</span><span id="simN">+0 classes</span></div>
@@ -266,6 +266,7 @@ function initials(n){return (n||'').split(/\s+/).map(w=>w[0]).slice(0,2).join(''
 function render(d){
   document.getElementById('loginBox').style.display='none';
   document.getElementById('result').style.display='block';
+  var tg=document.getElementById('tagline'); if(tg) tg.style.display='none';
   document.getElementById('nm').textContent=d.name||'—';
   document.getElementById('rl').textContent=d.rollNo||'—';
   document.getElementById('ava').textContent=initials(d.name);
@@ -285,6 +286,7 @@ function render(d){
     const totalMin=present*60 + days*40;              // class time + 40-min lunch per day
     countUp(document.getElementById('hoursN'),Math.floor(totalMin/60),'');
     document.getElementById('minsN').textContent=totalMin%60;
+    countUp(document.getElementById('totalMinsN'),totalMin,'');
     sim();buildBunk();
   }
 
@@ -331,6 +333,7 @@ function calc(){
 }
 function logout(){
   document.getElementById('result').style.display='none';document.getElementById('loginBox').style.display='block';
+  var tg=document.getElementById('tagline'); if(tg) tg.style.display='block';
   document.getElementById('roll').value='';document.getElementById('out').style.display='none';
   document.getElementById('prog').style.strokeDashoffset=CIRC;document.getElementById('simRange').value=0;DATA=null;
 }
