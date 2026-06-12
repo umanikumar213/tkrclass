@@ -26,6 +26,8 @@
   header .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
   header h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:8px}
   header p{color:var(--sub);font-size:14px;margin-top:4px}
+  header .tagline{margin-top:16px;padding:12px 16px;border-radius:12px;background:var(--accent-soft);
+    border:1px solid #dfe2fb;color:var(--accent);font-size:13px;font-weight:600;line-height:1.5}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:16px;
     opacity:0;transform:translateY(10px);animation:rise .5s ease forwards}
@@ -82,12 +84,18 @@
   .stat span{font-size:11px;color:var(--faint)}
   .stat.pre b{color:var(--green)} .stat.abs b{color:var(--red)}
 
+  .hours{display:flex;align-items:center;gap:12px;margin:0 20px 4px;padding:14px 16px;border-top:1px solid var(--line2);
+    font-size:14px;color:var(--sub)}
+  .hours .h-ico{font-size:22px}
+  .hours b{font-size:20px;color:var(--ink);font-weight:700}
+  .hours small{display:block;color:var(--faint);font-size:12px;margin-top:2px}
+
   .sim{padding:4px 20px 20px;border-top:1px solid var(--line2)}
   .sim .row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--sub);margin:16px 0 10px}
   .sim input[type=range]{width:100%;accent-color:var(--accent)}
   .sim .proj{margin-top:12px;font-size:14px;color:var(--sub)}
   .sim .proj b{font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
-  .sim .ex{font-size:12px;color:var(--faint);margin-left:6px}
+  .sim .ex{display:block;font-size:12px;color:var(--faint);margin-top:4px}
 
   /* calculator */
   .calc{padding:8px 20px 20px}
@@ -147,16 +155,17 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">TKR College Of Engineering & Technology</div>
+    <div class="eyebrow">TKR College of Engineering &amp; Technology</div>
     <h1>MYTKR.in</h1>
-    <p>Enter your roll number to see How Many Days You can BUNK</p>
+    <p>Enter your roll number to see how many days you can bunk.</p>
+    <div class="tagline">Designed by Backbenchers, dedicated to every attendance warrior who ever said — “Bro, attendance entha?” 😁❤️</div>
   </header>
 
   <div class="card login" id="loginBox"><div class="pad">
-    <h2>Attendance</h2>
-    <div class="hint">By the bunkers. For the believers.</div>
+    <h2>Sign in</h2>
+    <div class="hint">Your roll number is your username.</div>
     <label for="roll">Roll number</label>
-    <input id="roll" placeholder="Enter Yout Roll Number" autocomplete="off" />
+    <input id="roll" placeholder="24K95A6718" autocomplete="off" />
     <button class="btn" id="btn" onclick="go()">View attendance</button>
     <div class="err" id="err"></div>
   </div></div>
@@ -185,6 +194,11 @@
           <div class="stat pre"><b id="sPre">0</b><span>Present</span></div>
           <div class="stat abs"><b id="sAbs">0</b><span>Absent</span></div>
         </div>
+      </div>
+      <div class="hours" id="hoursBox">
+        <span class="h-ico">⏱️</span>
+        <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins in college
+          <small>1 class = 1 hour · plus ~40 min lunch each day you attended</small></div>
       </div>
       <div class="sim">
         <div class="row"><span>Simulate attending more</span><span id="simN">+0 classes</span></div>
@@ -226,10 +240,6 @@
       <div class="periods" id="periods"></div>
     </div>
 
-    <div class="card" id="subjCard">
-      <div class="lbl">Subject-wise</div>
-      <div class="subj" id="subj"></div>
-    </div>
 
     <button class="back" onclick="logout()">Check another</button>
   </div>
@@ -267,7 +277,17 @@ function render(d){
   const pe=document.getElementById('pct');countUp(pe,pct,'%');
   const col=pct<65?'var(--red)':(pct<75?'var(--amber)':'var(--green)');
   prog.setAttribute('stroke',col);pe.style.color=col;
-  if(d.summary){countUp(document.getElementById('sCon'),d.summary.conducted,'');countUp(document.getElementById('sPre'),d.summary.present,'');countUp(document.getElementById('sAbs'),d.summary.absent,'');sim();buildBunk();}
+  if(d.summary){
+    countUp(document.getElementById('sCon'),d.summary.conducted,'');
+    countUp(document.getElementById('sPre'),d.summary.present,'');
+    countUp(document.getElementById('sAbs'),d.summary.absent,'');
+    const present=d.summary.present;
+    const days=Math.round(present/6);                 // ~6 classes per full day
+    const totalMin=present*60 + days*40;              // class time + 40-min lunch per day
+    countUp(document.getElementById('hoursN'),Math.floor(totalMin/60),'');
+    document.getElementById('minsN').textContent=totalMin%60;
+    sim();buildBunk();
+  }
 
   const lc=document.getElementById('latestCard');
   if(d.latestDay&&d.latestDay.periods){
@@ -278,16 +298,6 @@ function render(d){
       return `<div class="pcell ${p.status}"><div class="pno">P${i+1}</div><div class="st">${lbl}</div>${sb}</div>`;
     }).join('');
   }else{lc.style.display='none';}
-
-  const s=document.getElementById('subj');
-  if(d.perSubject&&d.perSubject.length){
-    s.innerHTML=d.perSubject.map(x=>{
-      const [a,h]=(x.attended||'').split('/').map(Number);const p=h?Math.round(a/h*100):null;
-      const cls=p===null?'':(p<65?'lo':'ok');const barc=p===null?'#cbd0d6':(p<65?'var(--red)':(p<75?'var(--amber)':'var(--green)'));
-      return `<div class="srow"><div class="nm">${x.subject}</div><div class="bar"><i data-w="${p||0}" style="background:${barc}"></i></div><div class="val ${cls}">${x.attended}${p!==null?` · ${p}%`:''}</div></div>`;
-    }).join('');
-    setTimeout(()=>document.querySelectorAll('.srow .bar i').forEach(b=>b.style.width=b.dataset.w+'%'),200);
-  }else{document.getElementById('subjCard').style.display='none';}
 }
 function sim(){
   if(!DATA||!DATA.summary)return;
@@ -295,7 +305,7 @@ function sim(){
   const proj=(C+n)?((P+n)/(C+n)*100):0;
   document.getElementById('simN').textContent='+'+n+' class'+(n===1?'':'es');
   document.getElementById('simPct').textContent=proj.toFixed(2)+'%';
-  document.getElementById('simEx').textContent=P+'+'+n+' / '+C+'+'+n;
+  document.getElementById('simEx').textContent='≈ '+Math.ceil(n/6)+' day(s) of college';
 }
 function buildBunk(){
   const C=DATA.summary.conducted,P=DATA.summary.present;
