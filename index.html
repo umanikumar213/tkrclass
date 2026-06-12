@@ -154,7 +154,7 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
+   <header>
     <div class="eyebrow">TKR College of Engineering &amp; Technology</div>
     <h2 class="tagline" id="tagline">Designed by Backbenchers, dedicated to every attendance warrior who ever said — “Bro, attendance entha?” 😁❤️</h2>
   </header>
@@ -195,7 +195,7 @@
       </div>
       <div class="hours" id="hoursBox">
         <span class="h-ico">⏱️</span>
-        <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins spent in college
+        <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins in college</div>
       </div>
       <div class="sim">
         <div class="row"><span>Simulate attending more</span><span id="simN">+0 classes</span></div>
@@ -284,7 +284,6 @@ function render(d){
     const totalMin=present*60 + days*40;              // class time + 40-min lunch per day
     countUp(document.getElementById('hoursN'),Math.floor(totalMin/60),'');
     document.getElementById('minsN').textContent=totalMin%60;
-    countUp(document.getElementById('totalMinsN'),totalMin,'');
     sim();buildBunk();
   }
 
