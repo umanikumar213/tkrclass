@@ -149,14 +149,14 @@
   <header>
     <div class="eyebrow">TKR</div>
     <h1>Attendance</h1>
-    <p>Enter your roll number to see where you stand.</p>
+    <p>Sign in with your roll number to see where you stand.</p>
   </header>
 
   <div class="card login" id="loginBox"><div class="pad">
-    <h2>Mytkr.in</h2>
-    <div class="hint">The Portal to Calculate Real Attendance.</div>
+    <h2>Sign in</h2>
+    <div class="hint">Your roll number is your username.</div>
     <label for="roll">Roll number</label>
-    <input id="roll" placeholder="Enter Roll Number" autocomplete="off" />
+    <input id="roll" placeholder="24K95A6718" autocomplete="off" />
     <button class="btn" id="btn" onclick="go()">View attendance</button>
     <div class="err" id="err"></div>
   </div></div>
@@ -167,16 +167,6 @@
         <div><div class="nm" id="nm">—</div><div class="rl" id="rl">—</div></div></div>
     </div>
 
-    <div class="card">
-      <div class="lbl">Daily Dose</div>
-      <div class="roast">
-        <div class="body" id="roastBody">—</div>
-        <div class="meta">
-          <button class="cp" id="cpBtn" onclick="copyRoast()">Copy</button>
-          <span class="tag">Changes every day</span>
-        </div>
-      </div>
-    </div>
 
     <div class="card">
       <div class="lbl">Overall</div>
@@ -248,102 +238,6 @@
 <script>
 let DATA=null; const CIRC=339.3;
 
-const ROASTS=[
- ["The college sent a search party, then gave up and declared you a legend instead.",
-  "Your roll number shows up in the register, but your face is classified information.",
-  "You've attended so few classes the WiFi has logged more hours on campus than you.",
-  "The security guard checks your ID every time because, to him, you're a stranger who wandered in.",
-  "Your attendance graph is a flatline. Medically speaking, that bar chart is deceased.",
-  "Professors mark you absent on autopilot now — it's muscle memory at this point.",
-  "You're not a student, you're a rumor the juniors tell each other to stay scared.",
-  "Your bench has gathered enough dust to qualify as an archaeological dig site.",
-  "You treat the campus gate like a haunted house entrance — admired from far, entered never.",
-  "Even your online classes were attended purely in spirit, never in attendance.",
-  "Google Maps marked your seat 'permanently closed' due to lack of activity.",
-  "The only backlog bigger than your subjects is the list of days you skipped.",
-  "You've unlocked a rare achievement: being enrolled and absent simultaneously, full-time.",
-  "Your attendance is so low it doesn't round up, it rounds into a cautionary tale.",
-  "The timetable has shown up to more of your classes than you have.",
-  "You came to college once and the entire section gave a standing ovation.",
-  "At this attendance, the exam hall will feel like a first date with the syllabus.",
-  "You ghosted college so hard the principal considered filing a missing-person report."],
- ["You attend just often enough to remind the staff that you technically still exist.",
-  "Your attendance runs on hope, last-bench energy, and the occasional guilty Monday.",
-  "You show up, sign the sheet, and vanish like a magician who hates encores.",
-  "The register knows your name perfectly; your face, however, remains a plot twist.",
-  "You treat lectures like ads — you wait five seconds and then skip them entirely.",
-  "Fifty percent isn't a goal for you, it's a finish line you're sprinting away from.",
-  "You visit class the way distant relatives visit: rarely, briefly, and unannounced.",
-  "Your motivation has worse uptime than the college server during result season.",
-  "You've mastered the fine art of being 'technically a student' and nothing more.",
-  "Your seat files a complaint every week about emotional neglect and abandonment.",
-  "You collect absents the way other people collect loyalty points — proudly, steadily.",
-  "Half your classes happen in a parallel universe where you actually attended them.",
-  "You negotiate with your attendance percentage like it personally owes you money.",
-  "You clock into college like it's an inconvenient cameo in your own life.",
-  "Your relationship status with the timetable is officially 'it's complicated.'",
-  "You show up mainly to confirm the building hasn't moved since last time.",
-  "Your presence on campus is a limited-edition drop nobody managed to catch.",
-  "You're enrolled in vibes and minoring in absence, and somehow still surprised."],
- ["You balance on the 65% line like it's a tightrope strung over a pit of warning letters.",
-  "Your attendance does cardio every week: a little up, a little down, a lot of panic.",
-  "You're gambling with your percentage, and the rulebook is the house that always wins.",
-  "One more casual bunk and the warning letter will basically write itself.",
-  "You live in the danger zone but keep redecorating it like it's a comfort zone.",
-  "Your margin for error is now thinner than the campus WiFi signal at 9 a.m.",
-  "You treat the attendance cutoff as a polite suggestion rather than an actual rule.",
-  "You're playing Jenga with your own attendance and pretending the tower is stable.",
-  "One bad fever and you're one re-registration away from a very awkward parent meeting.",
-  "Your attendance is a thriller where even you don't know how the semester ends.",
-  "You ration your presence like it's wartime and classes are the last loaf of bread.",
-  "You flirt with the danger line so often the danger line wants commitment now.",
-  "You attend exactly enough to argue with the system later, and not one class more.",
-  "Your percentage has trust issues, and honestly, you gave it every reason to.",
-  "You're a coin-flip away from condonation fees and you keep flipping the coin anyway.",
-  "You ride the 65% boundary like a hoverboard with a low battery warning blinking.",
-  "You keep college on read and reply at the exact last second, every single time.",
-  "Your survival strategy is technicalities, optimism, and a calendar you refuse to check."],
- ["Look at you, nearly a model student — the operative, slightly tragic word being 'nearly.'",
-  "You attend enough to lecture others about attendance, and the audacity is breathtaking.",
-  "You're the one reminding the teacher about homework nobody else remembered existed.",
-  "Safe attendance, zero risk, maximum predictability — a bold strategy for someone so boring.",
-  "You show up so reliably the ceiling fan now greets you by name each morning.",
-  "You've essentially gentrified the front bench and pushed everyone else to the back.",
-  "High attendance and still complaining about it — a true classic of the genre.",
-  "You came for the education and stayed for the free air conditioning, let's be honest.",
-  "You do the readings, on time, voluntarily, and frankly that's a little suspicious.",
-  "Your attendance is the group project quietly carrying everyone who didn't show up.",
-  "You treat bunking like a forbidden ritual you're far too responsible to ever perform.",
-  "You're suspiciously on track, which around here counts as deeply abnormal behavior.",
-  "You set the attendance curve and the whole class has quietly started to resent you.",
-  "You log in early like the entire server's uptime depends on your personal punctuality.",
-  "You're the unpaid teaching assistant nobody hired but everybody got anyway.",
-  "Almost a perfect record — which is almost, very slightly, genuinely annoying.",
-  "You color inside every line, follow every rule, and call that a personality.",
-  "You're 'well, actually' in human form, except the attendance sheet edition."],
- ["Your attendance is so high the principal keeps mistaking you for a faculty member.",
-  "You attend college like there's a loyalty rewards program and you're chasing platinum tier.",
-  "You haven't missed a single class — blink twice right now if someone's holding you hostage.",
-  "The canteen has completely forgotten your face; the classroom built you a shrine.",
-  "You're not a student anymore, you're an attendance machine running on pure spite.",
-  "Even the teacher takes a sick day before you'd ever consider taking one yourself.",
-  "You showed up to a class that got cancelled and waited anyway. Please, rest.",
-  "100% present, 0% chill — a legendary record with a deeply concerning subtext.",
-  "Your seat has your name carved into it now, like a throne nobody else dares touch.",
-  "You'd attend on a national holiday if the gate so much as creaked open by accident.",
-  "You treat a single sick day as a personal failure that haunts your permanent record.",
-  "You out-attend the cleaning staff, the security guard, and arguably the building itself.",
-  "The biometric scanner lights up when it sees you, like an old friend who missed you.",
-  "You've never once seen the 'absent' color and it shows in your terrifying consistency.",
-  "You set alarms to arrive early to the thing you were already going to be early for.",
-  "The timetable consults you before making changes — you've become its trusted advisor.",
-  "You attend so relentlessly it loops all the way back around to becoming a flex.",
-  "You treat a free period like a personal insult and a betrayal of your life's work."]
-];
-function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
-function tierOf(p){return p<25?0:p<50?1:p<75?2:p<90?3:4;}
-function buildRoast(roll,pct){const day=new Date().toISOString().slice(0,10);const seed=(roll||'x')+'|'+day;const l=ROASTS[tierOf(pct)];return l[hash(seed+'r')%l.length];}
-function copyRoast(){const t=document.getElementById('roastBody').textContent;navigator.clipboard?.writeText(t).then(()=>{const b=document.getElementById('cpBtn');b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500);});}
 
 async function go(){
   const roll=document.getElementById('roll').value.trim();
@@ -367,7 +261,6 @@ function render(d){
   document.getElementById('rl').textContent=d.rollNo||'—';
   document.getElementById('ava').textContent=initials(d.name);
   const pct=parseFloat(d.overall||(d.summary&&d.summary.percentage)||0)||0;
-  document.getElementById('roastBody').textContent=buildRoast(d.rollNo||d.name||'x',pct);
 
   const prog=document.getElementById('prog');
   setTimeout(()=>{prog.style.strokeDashoffset=CIRC*(1-pct/100);},120);
