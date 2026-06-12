@@ -14,9 +14,20 @@ const BASE  = 'http://103.171.190.44/TKRCET';
 const LOGIN = `${BASE}/`;
 const abs = (href, base) => { try { return new URL(href, base).href; } catch { return null; } };
 
+// Short-lived cache so repeat checks of the same roll don't hammer the slow portal.
+const CACHE = new Map();          // roll -> { at, data }
+const CACHE_MS = 60 * 1000;       // 60 seconds
+
 app.post('/login', async (req, res) => {
   const roll = (req.body.rollNumber || '').trim();
   if (!roll) return res.json({ success: false, message: 'No roll number provided' });
+
+  const cached = CACHE.get(roll.toUpperCase());
+  if (cached && (Date.now() - cached.at) < CACHE_MS) {
+    console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → served from cache`);
+    return res.json({ ...cached.data, cached: true });
+  }
+  console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → fetching live from portal`);
 
   try {
     const jar = new CookieJar();
@@ -77,32 +88,13 @@ app.post('/login', async (req, res) => {
       try { const r = await client.get(`${BASE}/MainFrameset.php`, { headers: { Referer: mainUrl } }); mainUrl = `${BASE}/MainFrameset.php`; mainHtml = String(r.data); } catch {}
     }
 
-    // Step 4: read frames + the attendance page
-    const toFetch = new Set();
-    toFetch.add(`${BASE}/StudentInformationForStudent.php`);
-    const $m = cheerio.load(mainHtml);
-    $m('frame, iframe').each((i, el) => { const src = abs($m(el).attr('src') || '', mainUrl); if (src) toFetch.add(src); });
-
+    // Step 4: go straight to the attendance page (no need to crawl every frame)
     let dump = '', attendanceHtml = '';
-    const visited = new Set();
-    const readPage = async (url) => {
-      if (!url || visited.has(url)) return '';
-      visited.add(url);
-      try {
-        const r = await client.get(url, { headers: { 'Referer': mainUrl } });
-        const html = String(r.data);
-        if (/StudentInformationForStudent\.php/i.test(url)) attendanceHtml = html;
-        const $p = cheerio.load(html);
-        $p('a').each((i, el) => {
-          const t = $p(el).text().trim().toLowerCase();
-          const href = abs($p(el).attr('href') || '', url);
-          if (href && (t.includes('attendance') || t.includes('personal details'))) toFetch.add(href);
-        });
-        return `\n===== ${url} =====\n${$p('body').text().replace(/\n{3,}/g, '\n\n').trim()}\n`;
-      } catch (e) { return ''; }
-    };
-    for (const url of [...toFetch]) dump += await readPage(url);
-    for (const url of [...toFetch]) dump += await readPage(url);
+    try {
+      const r = await client.get(`${BASE}/StudentInformationForStudent.php`, { headers: { 'Referer': mainUrl } });
+      attendanceHtml = String(r.data);
+      dump = cheerio.load(attendanceHtml)('body').text().replace(/\n{3,}/g, '\n\n').trim();
+    } catch (e) { /* leave dump empty → handled below */ }
 
     // Step 5: parse
     const clean = s => (s || '').replace(/\s+/g, ' ').trim();
@@ -120,13 +112,14 @@ app.post('/login', async (req, res) => {
     for (let i = 0; i < Math.min(subjects.length, ratioList.length); i++) perSubject.push({ subject: subjects[i], attended: ratioList[i] });
 
     let latestDay = null;
+    let streak = 0;
     if (attendanceHtml) {
       const $a = cheerio.load(attendanceHtml);
       let dayTable = null;
       $a('table').each((i, t) => { const head = clean($a(t).text()); if (/WeekDay/.test(head) && /Date/.test(head)) dayTable = t; });
       if (dayTable) {
+        const days = [];
         $a(dayTable).find('tr').each((i, tr) => {
-          if (latestDay) return;
           const tds = $a(tr).find('td'); if (tds.length < 2) return;
           const dateTxt = clean($a(tds[0]).text());
           if (!/^\d{2}-\d{2}-\d{4}$/.test(dateTxt)) return;
@@ -140,12 +133,25 @@ app.post('/login', async (req, res) => {
             for (let s = 0; s < span; s++) periods.push({ status, subject });
           }
           while (periods.length < 6) periods.push({ status: 'dash', subject: '' });
-          latestDay = { date: dateTxt, weekday, periods: periods.slice(0, 6) };
+          days.push({ date: dateTxt, weekday, periods: periods.slice(0, 6) });
         });
+
+        if (days.length) latestDay = days[0]; // table is newest-first
+
+        // Streak: from newest day backwards, count days where EVERY real period is Present.
+        // A single Absent period breaks it. Days with no marked periods (all dash) are skipped.
+        for (const d of days) {
+          const marked = d.periods.filter(p => p.status !== 'dash');
+          if (marked.length === 0) continue;          // nothing happened that day → skip, don't break
+          if (marked.some(p => p.status === 'absent')) break; // any absent → streak ends
+          streak++;                                    // all present → counts
+        }
       }
     }
 
-    return res.json({ success: true, rollNo: roll_no, name, overall, summary, perSubject, latestDay });
+    const result = { success: true, rollNo: roll_no, name, overall, summary, perSubject, latestDay, streak };
+    CACHE.set(roll.toUpperCase(), { at: Date.now(), data: result });
+    return res.json(result);
   } catch (err) {
     return res.json({ success: false, message: err.message });
   }
