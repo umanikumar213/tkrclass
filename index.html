@@ -147,16 +147,16 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">TKR College Of Engineering & Technology</div>
-    <h1>MYTKR.in</h1>
-    <p>Enter your roll number to see How Many Days You can BUNK.</p>
+    <div class="eyebrow">TKR</div>
+    <h1>Attendance</h1>
+    <p>Sign in with your roll number to see where you stand.</p>
   </header>
 
   <div class="card login" id="loginBox"><div class="pad">
-    <h2>Attendance</h2>
-    <div class="hint">By the bunkers. For the believers.</div>
+    <h2>Sign in</h2>
+    <div class="hint">Your roll number is your username.</div>
     <label for="roll">Roll number</label>
-    <input id="roll" placeholder="Enter Your Roll Number" autocomplete="off" />
+    <input id="roll" placeholder="24K95A6718" autocomplete="off" />
     <button class="btn" id="btn" onclick="go()">View attendance</button>
     <div class="err" id="err"></div>
   </div></div>
@@ -211,19 +211,19 @@
       </div>
     </div>
 
-    <div class="card" id="latestCard">
-      <div class="lbl">Latest attendance</div>
-      <div class="day-h" id="dayHead">—</div>
-      <div class="note">Green = present · Red = absent · — = not marked</div>
-      <div class="periods" id="periods"></div>
-    </div>
-
     <div class="card">
       <div class="lbl">Bunk calculator</div>
       <div class="bunk">
         <div class="note" style="padding:0 0 10px">If you skip classes (1 day = 6 classes):</div>
         <div id="bunkRows"></div>
       </div>
+    </div>
+
+    <div class="card" id="latestCard">
+      <div class="lbl">Latest attendance</div>
+      <div class="day-h" id="dayHead">—</div>
+      <div class="note">Green = present · Red = absent · — = not marked</div>
+      <div class="periods" id="periods"></div>
     </div>
 
     <div class="card" id="subjCard">
