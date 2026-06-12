@@ -103,6 +103,12 @@ app.post('/login', async (req, res) => {
       dump = cheerio.load(attendanceHtml)('body').text().replace(/\n{3,}/g, '\n\n').trim();
     } catch (e) { /* leave dump empty → handled below */ }
 
+    // If the attendance page never loaded real data, the login didn't truly succeed → invalid.
+    if (!dump || /invalid\s*details/i.test(attendanceHtml) || !/Roll No:/i.test(dump)) {
+      console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → invalid details`);
+      return res.json({ success: false, message: 'Invalid details. Please check your roll number.' });
+    }
+
     // Step 5: parse
     const clean = s => (s || '').replace(/\s+/g, ' ').trim();
     const roll_no = (dump.match(/Roll No:\s*([A-Z0-9]+)/i) || [])[1] || roll;
