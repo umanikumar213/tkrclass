@@ -37,7 +37,6 @@
   .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
     padding:16px 20px 0}
 
-  /* login */
   .login{max-width:420px;margin:8vh auto 0}
   .login .pad{padding:32px 28px}
   .login h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
@@ -55,23 +54,20 @@
   .err{margin-top:14px;padding:11px 13px;border-radius:10px;font-size:13px;display:none;
     background:var(--red-soft);color:var(--red)}
 
-  /* student */
+  .loader{display:none;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;border-radius:10px;
+    background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:500}
+  .loader .spin{width:16px;height:16px;border:2.5px solid #c7cbf5;border-top-color:var(--accent);
+    border-radius:50%;flex-shrink:0;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loadMsg{animation:fade .4s ease}
+  @keyframes fade{from{opacity:.3}to{opacity:1}}
+
   .stu{display:flex;align-items:center;gap:14px;padding:20px}
   .ava{width:46px;height:46px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
     font-weight:600;font-size:16px;color:#fff;background:var(--accent)}
   .stu .nm{font-size:17px;font-weight:600;letter-spacing:-.01em}
   .stu .rl{color:var(--sub);font-size:13px;margin-top:1px}
 
-  /* roast */
-  .roast{padding:8px 20px 20px}
-  .roast .body{font-size:16px;font-weight:500;line-height:1.5;color:var(--ink)}
-  .roast .meta{margin-top:14px;display:flex;gap:10px;align-items:center}
-  .roast .cp{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 14px;
-    font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:.15s}
-  .roast .cp:hover{border-color:var(--accent);color:var(--accent)}
-  .roast .tag{font-size:12px;color:var(--faint)}
-
-  /* overall */
   .ov{display:flex;align-items:center;gap:24px;padding:20px;flex-wrap:wrap}
   .ring{position:relative;width:128px;height:128px;flex-shrink:0}
   .ring svg{transform:rotate(-90deg)}
@@ -97,7 +93,6 @@
   .sim .proj b{font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
   .sim .ex{display:block;font-size:12px;color:var(--faint);margin-top:4px}
 
-  /* calculator */
   .calc{padding:8px 20px 20px}
   .calc .row{display:flex;gap:10px;align-items:flex-end}
   .calc .fld{flex:1}
@@ -113,7 +108,6 @@
   .out .big{font-size:24px;font-weight:700;color:var(--accent);letter-spacing:-.02em}
   .out .days{display:block;margin-top:5px;color:var(--sub);font-size:12px}
 
-  /* latest */
   .day-h{padding:8px 20px 2px;font-size:14px;font-weight:600}
   .note{padding:0 20px;font-size:12px;color:var(--faint)}
   .periods{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:12px 20px 20px}
@@ -127,7 +121,6 @@
   .pcell.absent{background:var(--red-soft);border-color:#f5cccc} .pcell.absent .st{color:var(--red)}
   .pcell.dash .st{color:var(--faint)}
 
-  /* bunk */
   .bunk{padding:8px 20px 20px}
   .brow{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:10px;
     border:1px solid var(--line);margin-bottom:8px}
@@ -135,16 +128,6 @@
   .brow .l{font-size:14px;color:var(--ink)}
   .brow .r{font-weight:600;font-size:15px}
   .brow .r small{color:var(--faint);font-weight:400;margin-left:6px;font-size:12px}
-
-  /* subjects */
-  .subj{padding:6px 20px 14px}
-  .srow{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line2)}
-  .srow:last-child{border-bottom:none}
-  .srow .nm{font-weight:600;font-size:13px;width:84px;flex-shrink:0}
-  .srow .bar{flex:1;height:6px;border-radius:6px;background:#eef0f2;overflow:hidden}
-  .srow .bar i{display:block;height:100%;border-radius:6px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
-  .srow .val{width:92px;text-align:right;font-size:13px;font-weight:500;color:var(--sub)}
-  .ok{color:var(--green)} .lo{color:var(--red)}
 
   .back{display:block;margin:8px auto 0;padding:11px 22px;border:1px solid var(--line);background:#fff;
     color:var(--sub);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:500;font-size:14px;transition:.15s}
@@ -154,7 +137,7 @@
 </head>
 <body>
 <div class="wrap">
-   <header>
+  <header>
     <div class="eyebrow">TKR College of Engineering &amp; Technology</div>
     <h2 class="tagline" id="tagline">Designed by Backbenchers, dedicated to every attendance warrior who ever said — “Bro, condonation lekunda gattekkacha?" 😭</h2>
   </header>
@@ -164,8 +147,12 @@
     <div class="hint">80% ki deggara avthava,
 leka HOD room ki deggara avthava? 💀</div>
     <label for="roll">Roll number</label>
-    <input id="roll" placeholder="Enter Your Roll Number" autocomplete="off" />
+    <input id="roll" placeholder="ENTER YOUR ROLL NUMBER" autocomplete="off" />
     <button class="btn" id="btn" onclick="go()">View attendance</button>
+    <div class="loader" id="loader">
+      <span class="spin"></span>
+      <span id="loadMsg">Logging in…</span>
+    </div>
     <div class="err" id="err"></div>
   </div></div>
 
@@ -174,7 +161,6 @@ leka HOD room ki deggara avthava? 💀</div>
       <div class="stu"><div class="ava" id="ava">—</div>
         <div><div class="nm" id="nm">—</div><div class="rl" id="rl">—</div></div></div>
     </div>
-
 
     <div class="card">
       <div class="lbl">Overall</div>
@@ -196,7 +182,7 @@ leka HOD room ki deggara avthava? 💀</div>
       </div>
       <div class="hours" id="hoursBox">
         <span class="h-ico">⏱️</span>
-        <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins spent in college</div>
+        <div><b id="hoursN">0</b> hrs <b id="minsN">0</b> mins in college</div>
       </div>
       <div class="sim">
         <div class="row"><span>Simulate attending more</span><span id="simN">+0 classes</span></div>
@@ -238,7 +224,6 @@ leka HOD room ki deggara avthava? 💀</div>
       <div class="periods" id="periods"></div>
     </div>
 
-
     <button class="back" onclick="logout()">Check another</button>
   </div>
 </div>
@@ -246,19 +231,28 @@ leka HOD room ki deggara avthava? 💀</div>
 <script>
 let DATA=null; const CIRC=339.3;
 
-
 async function go(){
   const roll=document.getElementById('roll').value.trim();
-  const btn=document.getElementById('btn'),err=document.getElementById('err');
+  const btn=document.getElementById('btn'),err=document.getElementById('err'),loader=document.getElementById('loader');
   err.style.display='none';
   if(!roll){err.style.display='block';err.textContent='Please enter your roll number.';return;}
-  btn.disabled=true;btn.textContent='Loading…';
+
+  const steps=['Logging in…','Collecting your attendance…','Calculating bunks…','Avoiding condonation…','Negotiating with HOD…'];
+  let si=0;
+  const msg=document.getElementById('loadMsg');
+  msg.textContent=steps[0];
+  loader.style.display='flex';
+  btn.disabled=true;btn.textContent='Please wait…';
+  const timer=setInterval(()=>{si=(si+1)%steps.length;msg.textContent=steps[si];msg.style.animation='none';void msg.offsetWidth;msg.style.animation='fade .4s ease';},1100);
+
+  const done=()=>{clearInterval(timer);loader.style.display='none';btn.disabled=false;btn.textContent='View attendance';};
+
   try{
     const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rollNumber:roll})});
-    const d=await r.json();btn.disabled=false;btn.textContent='View attendance';
+    const d=await r.json();done();
     if(!d.success){err.style.display='block';err.textContent=d.message;return;}
     DATA=d;render(d);
-  }catch(e){btn.disabled=false;btn.textContent='View attendance';err.style.display='block';err.textContent='Cannot reach server. Please try again.';}
+  }catch(e){done();err.style.display='block';err.textContent='Cannot reach server. Please try again.';}
 }
 function initials(n){return (n||'').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()||'?';}
 
@@ -281,8 +275,8 @@ function render(d){
     countUp(document.getElementById('sPre'),d.summary.present,'');
     countUp(document.getElementById('sAbs'),d.summary.absent,'');
     const present=d.summary.present;
-    const days=Math.round(present/6);                 // ~6 classes per full day
-    const totalMin=present*60 + days*40;              // class time + 40-min lunch per day
+    const days=Math.round(present/6);
+    const totalMin=present*60 + days*40;
     countUp(document.getElementById('hoursN'),Math.floor(totalMin/60),'');
     document.getElementById('minsN').textContent=totalMin%60;
     sim();buildBunk();
