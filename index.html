@@ -62,11 +62,12 @@
   #loadMsg{animation:fade .4s ease}
   @keyframes fade{from{opacity:.3}to{opacity:1}}
 
-  .stu{display:flex;align-items:center;gap:14px;padding:20px}
-  .ava{width:46px;height:46px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-    font-weight:600;font-size:16px;color:#fff;background:var(--accent)}
-  .stu .nm{font-size:17px;font-weight:600;letter-spacing:-.01em}
-  .stu .rl{color:var(--sub);font-size:13px;margin-top:1px}
+  .stu{display:flex;align-items:center;gap:18px;padding:24px}
+  .ava{width:64px;height:64px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-weight:600;font-size:20px;color:#fff;background:var(--accent);overflow:hidden;}
+  .ava img{width:100%;height:100%;object-fit:cover;display:block;}
+  .stu .nm{font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .stu .rl{color:var(--sub);font-size:14px;margin-top:2px}
 
   .ov{display:flex;align-items:center;gap:24px;padding:20px;flex-wrap:wrap}
   .ring{position:relative;width:128px;height:128px;flex-shrink:0}
@@ -263,7 +264,15 @@ function render(d){
   var tg=document.getElementById('tagline'); if(tg) tg.style.display='none';
   document.getElementById('nm').textContent=d.name||'—';
   document.getElementById('rl').textContent=d.rollNo||'—';
-  document.getElementById('ava').textContent=initials(d.name);
+  
+  const rollUpper = (d.rollNo || '').toUpperCase();
+  const initText = initials(d.name);
+  document.getElementById('ava').innerHTML = `
+    <img src="https://tkrcet.in/images/${rollUpper}.webp" 
+         onerror="this.onerror=null; this.parentElement.textContent='${initText}';" 
+         alt="Profile">
+  `;
+  
   const pct=parseFloat(d.overall||(d.summary&&d.summary.percentage)||0)||0;
 
   const prog=document.getElementById('prog');
