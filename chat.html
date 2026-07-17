@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Confession Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#7B1800; --maroon-dark:#5e1200; --gold:#E8A000; --gold-soft:#fdf3df;
+    --bg:#faf7f4; --card:#fff; --line:#eee2da; --ink:#241a16; --sub:#7a6a62; --faint:#a89a92;
+    --red:#dc2626; --red-soft:#fdecec; --green:#0f9d58;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:560px;margin:0 auto;padding:28px 16px 80px}
+  header{margin-bottom:20px}
+  header .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+  header h1{font-size:24px;font-weight:700;letter-spacing:-.02em;color:var(--maroon);margin-top:4px}
+  header p{color:var(--sub);font-size:13px;margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+  .pad{padding:18px}
+  textarea{width:100%;min-height:90px;padding:12px;font-family:inherit;font-size:15px;color:var(--ink);
+    border:1px solid var(--line);border-radius:10px;outline:none;resize:vertical}
+  textarea:focus{border-color:var(--maroon);box-shadow:0 0 0 3px #7b180014}
+  .cnt{font-size:11px;color:var(--faint);text-align:right;margin-top:4px}
+  .filebar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .filebtn{display:inline-block;padding:9px 14px;border:1px dashed var(--line);border-radius:10px;font-size:13px;
+    color:var(--sub);cursor:pointer;background:#fffdf8}
+  .filebtn:hover{border-color:var(--gold);color:var(--maroon)}
+  #fileName{font-size:12px;color:var(--sub);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #clearImg{display:none;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit}
+  .btn{width:100%;margin-top:14px;padding:13px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;
+    font-weight:600;font-size:14px;color:#fff;background:var(--maroon);transition:.15s}
+  .btn:hover{background:var(--maroon-dark)} .btn:disabled{opacity:.55;cursor:not-allowed}
+  .msg{margin-top:12px;padding:11px 13px;border-radius:10px;font-size:13px;display:none}
+  .msg.ok{background:var(--gold-soft);color:#8a6100;display:block}
+  .msg.bad{background:var(--red-soft);color:var(--red);display:block}
+  .days{display:flex;gap:6px;overflow-x:auto;padding:2px;margin-bottom:14px;-webkit-overflow-scrolling:touch}
+  .day{flex-shrink:0;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;
+    font-family:inherit;font-size:12px;font-weight:500;color:var(--sub);text-align:center;line-height:1.3;transition:.15s}
+  .day b{display:block;font-size:13px;color:var(--ink)}
+  .day.active{background:var(--maroon);border-color:var(--maroon)}
+  .day.active b,.day.active{color:#fff}
+  .post{padding:16px 18px}
+  .post .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .pnum{font-weight:700;font-size:15px;color:var(--maroon)}
+  .pdate{font-size:11px;color:var(--faint)}
+  .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
+  .pimg{margin-top:10px;border-radius:10px;max-width:100%;display:block;border:1px solid var(--line)}
+  .pfoot{margin-top:10px;text-align:right}
+  .report{background:none;border:none;font-family:inherit;font-size:11px;color:var(--faint);cursor:pointer}
+  .report:hover{color:var(--red)}
+  .empty{text-align:center;color:var(--faint);font-size:14px;padding:36px 0}
+  .note{font-size:11px;color:var(--faint);text-align:center;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Anonymous · No names · No logins</div>
+    <h1>Confession Board</h1>
+    <p>Say it anonymously. Posts vanish after 7 days. Identified only by a post number.</p>
+  </header>
+
+  <div class="card"><div class="pad">
+    <textarea id="text" maxlength="500" placeholder="Your confession or opinion… (max 500 characters)"></textarea>
+    <div class="cnt"><span id="cnt">0</span>/500</div>
+    <div class="filebar">
+      <label class="filebtn">📷 Add image (optional)<input type="file" id="img" accept=".jpg,.jpeg,.png,.webp" hidden></label>
+      <span id="fileName"></span>
+      <button id="clearImg" onclick="clearImage()">✕ remove</button>
+    </div>
+    <button class="btn" id="submitBtn" onclick="submitPost()">Submit anonymously</button>
+    <div class="msg" id="msg"></div>
+    <div class="note">Images are stripped of location/EXIF data. 1 post per 3 minutes.</div>
+  </div></div>
+
+  <div class="days" id="days"></div>
+  <div id="feed"></div>
+</div>
+
+<script>
+const txt=document.getElementById('text'),cnt=document.getElementById('cnt'),imgIn=document.getElementById('img');
+let selectedDay=null;
+txt.addEventListener('input',()=>cnt.textContent=txt.value.length);
+imgIn.addEventListener('change',()=>{
+  const f=imgIn.files[0];
+  document.getElementById('fileName').textContent=f?f.name:'';
+  document.getElementById('clearImg').style.display=f?'inline':'none';
+});
+function clearImage(){imgIn.value='';document.getElementById('fileName').textContent='';document.getElementById('clearImg').style.display='none';}
+function showMsg(t,ok){const m=document.getElementById('msg');m.className='msg '+(ok?'ok':'bad');m.textContent=t;}
+
+async function submitPost(){
+  const btn=document.getElementById('submitBtn');
+  const text=txt.value.trim();
+  if(!text){showMsg('Please write something first.',false);return;}
+  const f=imgIn.files[0];
+  if(f&&f.size>5*1024*1024){showMsg('Image must be under 5MB.',false);return;}
+  btn.disabled=true;btn.textContent='Submitting…';
+  try{
+    const fd=new FormData();fd.append('text',text);if(f)fd.append('image',f);
+    const r=await fetch('/api/chat/posts',{method:'POST',body:fd});
+    const d=await r.json();
+    showMsg(d.message||(d.success?'Submitted!':'Something went wrong.'),d.success);
+    if(d.success){txt.value='';cnt.textContent='0';clearImage();}
+  }catch(e){showMsg('Cannot reach server. Try again.',false);}
+  btn.disabled=false;btn.textContent='Submit anonymously';
+}
+
+function buildDays(){
+  const el=document.getElementById('days');
+  const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html=`<button class="day ${selectedDay===null?'active':''}" onclick="pickDay(null)"><b>All</b>past week</button>`;
+  for(let i=0;i<7;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const label=i===0?'Today':names[d.getDay()];
+    html+=`<button class="day ${selectedDay===iso?'active':''}" onclick="pickDay('${iso}')"><b>${label}</b>${d.getDate()}/${d.getMonth()+1}</button>`;
+  }
+  el.innerHTML=html;
+}
+function pickDay(d){selectedDay=d;buildDays();loadFeed();}
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
+
+async function loadFeed(){
+  const feed=document.getElementById('feed');
+  feed.innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const r=await fetch('/api/chat/posts'+(selectedDay?'?day='+selectedDay:''));
+    const d=await r.json();
+    if(!d.success){feed.innerHTML='<div class="empty">Could not load posts.</div>';return;}
+    if(!d.posts.length){feed.innerHTML='<div class="empty">No confessions '+(selectedDay?'on this day':'yet')+'. Be the first 👀</div>';return;}
+    feed.innerHTML=d.posts.map(p=>`
+      <div class="card post">
+        <div class="top"><span class="pnum">#${p.post_number}</span><span class="pdate">${fmtDate(p.created_at)}</span></div>
+        <div class="ptext">${esc(p.text)}</div>
+        ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="">`:''}
+        <div class="pfoot"><button class="report" onclick="report(${p.id},this)">⚑ Report</button></div>
+      </div>`).join('');
+  }catch(e){feed.innerHTML='<div class="empty">Cannot reach server.</div>';}
+}
+async function report(id,btn){
+  if(!confirm('Report this post to the admin?'))return;
+  try{
+    const r=await fetch('/api/chat/posts/'+id+'/report',{method:'POST'});
+    const d=await r.json();
+    btn.textContent=d.success?'Reported ✓':'⚑ Report';btn.disabled=d.success;
+  }catch(e){}
+}
+buildDays();loadFeed();
+</script>
+</body>
+</html>
