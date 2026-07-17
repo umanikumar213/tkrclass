@@ -181,13 +181,11 @@ router.get('/api/chat/posts', async (req, res) => {
       params.push(req.query.day);
       where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`;
     }
-    params.push(PAGE_SIZE + 1); // fetch one extra to detect hasMore
-    params.push(offset);
     const { rows } = await pool.query(
       `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at
        FROM confessions WHERE ${where} ORDER BY post_number DESC
-       LIMIT ${params.length - 1} OFFSET ${params.length}`, params);
-
+       LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`,
+      params);
     const hasMore = rows.length > PAGE_SIZE;
     res.json({ success: true, posts: rows.slice(0, PAGE_SIZE), hasMore, page });
   } catch (e) {
