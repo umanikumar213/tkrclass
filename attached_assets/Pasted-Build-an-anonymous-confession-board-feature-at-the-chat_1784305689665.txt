@@ -1,0 +1,67 @@
+Build an anonymous confession board feature at the /chat route of my existing app.
+
+CORE CONCEPT:
+An anonymous confession/opinion board for college students. Each post is identified
+ONLY by a sequential post number (e.g. "#1", "#2", "#3"). No usernames, no likes,
+no upvotes, no comments. Just anonymous confessions with an optional image.
+
+POST SUBMISSION (public form at /chat):
+- ANYONE can post. Do NOT ask for a username, name, email, login, or any identifying
+  info whatsoever. The form has ONLY a text field and an optional image.
+- Every approved post is identified purely by an auto-incrementing post number shown
+  as "#1", "#2", "#3" and so on — assigned in order as admin approves them.
+- A text field for the confession/opinion (max 500 characters, required).
+- An optional image upload (max 5MB, only jpg/png/webp allowed).
+- A "Submit" button.
+- After submitting, show: "Your post has been submitted for approval. It will appear
+  once an admin approves it."
+- Rate-limit submissions to 1 post per 3 minutes per IP to prevent spam flooding.
+- Strip EXIF/location metadata from uploaded images to protect poster privacy.
+
+ADMIN APPROVAL SYSTEM:
+- New posts go into a "pending" state — they are NOT visible publicly until approved.
+- Create a separate admin page at /chat/admin protected by a simple password login
+  (store the admin password in a Replit Secret called ADMIN_PASSWORD).
+- On the admin page, show all pending posts with their text + image, and an
+  "Approve" and "Reject" button for each.
+- Post numbers are assigned ONLY at the moment of approval, in sequence, with NO gaps
+  (#1, #2, #3...). A pending or rejected post has no number. If post #5 is followed by
+  a rejection and then an approval, that next approved post becomes #6 — numbers never
+  skip. Store a running counter of approved posts and increment it on each approval.
+- When an admin REJECTS a post, immediately and permanently delete ALL of its data —
+  the text, the database row, AND the uploaded image file. Nothing about a rejected
+  post should remain anywhere.
+
+PUBLIC FEED (at /chat):
+- Show only APPROVED posts.
+- Newest posts appear at the TOP, older posts below (reverse chronological).
+- Each post shows: the post number (e.g. "#42"), the confession text, the image
+  (if any), and the date it was posted.
+- No like button, no vote button, no comment section. View only.
+- Add a "Report" button on each post that flags it for admin review (flagged posts
+  reappear in the admin queue so the admin can re-check or delete them).
+
+7-DAY ROLLING EXPIRY (per post):
+- Each post expires exactly 7 days (168 hours) after ITS OWN created_at timestamp.
+- This is NOT a weekly reset. A post made Wednesday 3pm expires the following
+  Wednesday 3pm. A post made Friday expires the following Friday.
+- When a post expires, permanently delete EVERYTHING: the database row, the text,
+  AND the image file from storage. No leftover image files.
+- Check for expired posts every time the feed loads (compare created_at to current
+  time; delete any post more than 7 days old, including its image).
+
+CALENDAR VIEW:
+- Add a calendar UI where each day of the past week is clickable.
+- Clicking a specific day filters the feed to show only posts from that day.
+- Show a "Today" / "All" option to see everything from the past week.
+
+TECH REQUIREMENTS:
+- Use a simple database (SQLite or Replit DB) to store posts with fields:
+  id, post_number, text, image_path (or image data), status (pending/approved),
+  reported (true/false), created_at timestamp.
+- Store uploaded images in a folder or as base64 in the DB.
+- Keep the design clean and mobile-friendly (most students will use phones).
+- Match a simple college theme: maroon (#7B1800) and gold (#E8A000) colors.
+
+Please build all of this, wire up the routes, and make sure the admin approval
+flow and the reject/expiry deletion both work end to end.
