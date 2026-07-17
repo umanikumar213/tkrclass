@@ -231,6 +231,7 @@
 </div>
 
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 let DATA=null; const CIRC=339.3;
 
 async function go(){
@@ -297,7 +298,7 @@ function render(d){
     document.getElementById('dayHead').textContent=d.latestDay.date+' · '+d.latestDay.weekday;
     document.getElementById('periods').innerHTML=d.latestDay.periods.map((p,i)=>{
       const lbl=p.status==='present'?'Present':p.status==='absent'?'Absent':'—';
-      const sb=p.subject?`<div class="sb">${p.subject}</div>`:'';
+      const sb=p.subject?`<div class="sb">${esc(p.subject)}</div>`:'';
       return `<div class="pcell ${p.status}"><div class="pno">P${i+1}</div><div class="st">${lbl}</div>${sb}</div>`;
     }).join('');
   }else{lc.style.display='none';}

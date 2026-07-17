@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -20,7 +21,15 @@ const abs = (href, base) => { try { return new URL(href, base).href; } catch { r
 const CACHE = new Map();          // roll -> { at, data }
 const CACHE_MS = 60 * 1000;       // 60 seconds
 
-app.post('/login', async (req, res) => {
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minute
+  max: 10,               // 10 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Please try again in a minute.' }
+});
+
+app.post('/login', loginLimiter, async (req, res) => {
   const roll = (req.body.rollNumber || '').trim();
   if (!roll) return res.json({ success: false, message: 'No roll number provided' });
 
