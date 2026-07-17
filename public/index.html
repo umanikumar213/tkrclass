@@ -37,7 +37,13 @@
   .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
     padding:16px 20px 0}
 
-  .login{max-width:420px;margin:8vh auto 0}
+  .login{max-width:420px;margin:0 auto}
+  .confessions-btn{display:block;width:100%;max-width:420px;margin:14px auto 0;padding:13px;border:none;
+    border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:15px;
+    color:#fff;background:linear-gradient(135deg,#f59e0b,#ef4444,#8b5cf6);
+    text-align:center;text-decoration:none;letter-spacing:.01em;
+    box-shadow:0 4px 14px rgba(239,68,68,.35);transition:.15s}
+  .confessions-btn:hover{opacity:.9;transform:translateY(-1px)}
   .login .pad{padding:32px 28px}
   .login h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
   .login .hint{color:var(--sub);font-size:13px;margin:4px 0 22px}
@@ -157,6 +163,8 @@
     </div>
     <div class="err" id="err"></div>
   </div></div>
+
+  <a href="/chat" class="confessions-btn">💬 Confessions</a>
 
   <div id="result" style="display:none">
     <div class="card">
