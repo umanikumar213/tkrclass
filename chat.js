@@ -24,7 +24,8 @@ setInterval(() => {
   for (const [ip, t] of lastPost) if (t < cutoff) lastPost.delete(ip);
 }, 10 * 60 * 1000).unref();
 
-const clientIp = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+// req.ip respects Express "trust proxy" (set in server.js) and cannot be spoofed via arbitrary headers
+const clientIp = req => req.ip || req.socket.remoteAddress || 'unknown';
 
 // --- admin auth ---
 function requireAdmin(req, res, next) {
@@ -114,8 +115,9 @@ router.get('/api/chat/image/:id', async (req, res) => {
     if (!Number.isInteger(id)) return res.status(400).end();
     const { rows } = await pool.query(`SELECT image_data, image_type, status FROM confessions WHERE id = $1`, [id]);
     if (!rows.length || !rows[0].image_data) return res.status(404).end();
-    // pending images only visible to admin
-    if (rows[0].status !== 'approved' && req.headers['x-admin-password'] !== process.env.ADMIN_PASSWORD) {
+    // pending images only visible to admin; fail closed if ADMIN_PASSWORD is unset
+    if (rows[0].status !== 'approved' &&
+        (!process.env.ADMIN_PASSWORD || req.headers['x-admin-password'] !== process.env.ADMIN_PASSWORD)) {
       return res.status(404).end();
     }
     res.set('Content-Type', rows[0].image_type || 'image/jpeg');
