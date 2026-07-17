@@ -4,7 +4,36 @@ const sharp = require('sharp');
 const { Pool } = require('pg');
 const path = require('path');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Railway (and most hosted PG) require SSL; Replit dev works without it.
+// rejectUnauthorized:false handles self-signed certs on Railway's internal PG.
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
+    ? { rejectUnauthorized: false }
+    : false,
+});
+
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS confessions (
+      id          SERIAL PRIMARY KEY,
+      post_number INTEGER UNIQUE,
+      text        VARCHAR(500) NOT NULL,
+      image_data  BYTEA,
+      image_type  TEXT,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      reported    BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS confession_counter (
+      name  TEXT PRIMARY KEY,
+      value INTEGER NOT NULL
+    );
+    INSERT INTO confession_counter (name, value) VALUES ('post_number', 0)
+      ON CONFLICT (name) DO NOTHING;
+  `);
+  console.log('[chat] DB schema ready');
+}
 const router = express.Router();
 
 const upload = multer({
@@ -192,4 +221,5 @@ router.post('/api/chat/admin/unflag/:id', requireAdmin, async (req, res) => {
   } catch { res.status(500).json({ success: false }); }
 });
 
+router.initDb = initDb;
 module.exports = router;

@@ -173,4 +173,7 @@ app.post('/login', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log('✅ Server running on port ' + PORT));
+const { initDb } = require('./chat');
+initDb()
+  .then(() => app.listen(PORT, () => console.log('✅ Server running on port ' + PORT)))
+  .catch(err => { console.error('❌ DB init failed, refusing to start:', err.message); process.exit(1); });
