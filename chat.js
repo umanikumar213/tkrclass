@@ -171,16 +171,25 @@ router.post('/api/chat/posts', (req, res) => {
 router.get('/api/chat/posts', async (req, res) => {
   try {
     await purgeExpired();
+    const PAGE_SIZE = 20;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const offset = (page - 1) * PAGE_SIZE;
+
     const params = [];
     let where = `status = 'approved'`;
     if (req.query.day && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day)) {
       params.push(req.query.day);
       where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`;
     }
+    params.push(PAGE_SIZE + 1); // fetch one extra to detect hasMore
+    params.push(offset);
     const { rows } = await pool.query(
       `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at
-       FROM confessions WHERE ${where} ORDER BY post_number DESC`, params);
-    res.json({ success: true, posts: rows });
+       FROM confessions WHERE ${where} ORDER BY post_number DESC
+       LIMIT ${params.length - 1} OFFSET ${params.length}`, params);
+
+    const hasMore = rows.length > PAGE_SIZE;
+    res.json({ success: true, posts: rows.slice(0, PAGE_SIZE), hasMore, page });
   } catch (e) {
     console.error('feed error:', e.message);
     res.status(500).json({ success: false, message: 'Could not load posts.' });

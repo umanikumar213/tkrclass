@@ -15,36 +15,45 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:560px;margin:0 auto;padding:28px 16px 80px}
-  header{margin-bottom:20px}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 80px}
+
+  /* --- header --- */
+  header{margin-bottom:14px}
   header .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
-  header h1{font-size:24px;font-weight:700;letter-spacing:-.02em;color:var(--maroon);margin-top:4px}
-  header p{color:var(--sub);font-size:13px;margin-top:4px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
-  .pad{padding:18px}
-  textarea{width:100%;min-height:90px;padding:12px;font-family:inherit;font-size:15px;color:var(--ink);
-    border:1px solid var(--line);border-radius:10px;outline:none;resize:vertical}
+  header h1{font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--maroon);margin-top:2px}
+  header p{color:var(--sub);font-size:12px;margin-top:2px}
+
+  /* --- compose box --- */
+  .compose{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  textarea{width:100%;min-height:64px;max-height:160px;padding:9px 10px;font-family:inherit;font-size:14px;
+    color:var(--ink);border:1px solid var(--line);border-radius:8px;outline:none;resize:vertical}
   textarea:focus{border-color:var(--maroon);box-shadow:0 0 0 3px #7b180014}
-  .cnt{font-size:11px;color:var(--faint);text-align:right;margin-top:4px}
-  .filebar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
-  .filebtn{display:inline-block;padding:9px 14px;border:1px dashed var(--line);border-radius:10px;font-size:13px;
-    color:var(--sub);cursor:pointer;background:#fffdf8}
+  .compose-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .cnt{font-size:11px;color:var(--faint);white-space:nowrap;margin-left:auto}
+  .filebtn{display:inline-flex;align-items:center;gap:5px;padding:7px 11px;border:1px dashed var(--line);
+    border-radius:8px;font-size:12px;color:var(--sub);cursor:pointer;background:#fffdf8;white-space:nowrap}
   .filebtn:hover{border-color:var(--gold);color:var(--maroon)}
-  #fileName{font-size:12px;color:var(--sub);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #clearImg{display:none;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit}
-  .btn{width:100%;margin-top:14px;padding:13px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;
-    font-weight:600;font-size:14px;color:#fff;background:var(--maroon);transition:.15s}
+  #fileName{font-size:12px;color:var(--sub);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #clearImg{display:none;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0}
+  .btn{flex:1;min-width:120px;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;
+    font-weight:600;font-size:13px;color:#fff;background:var(--maroon);transition:.15s;white-space:nowrap}
   .btn:hover{background:var(--maroon-dark)} .btn:disabled{opacity:.55;cursor:not-allowed}
-  .msg{margin-top:12px;padding:11px 13px;border-radius:10px;font-size:13px;display:none}
+  .msg{margin-top:8px;padding:9px 12px;border-radius:8px;font-size:12px;display:none}
   .msg.ok{background:var(--gold-soft);color:#8a6100;display:block}
   .msg.bad{background:var(--red-soft);color:var(--red);display:block}
-  .days{display:flex;gap:6px;overflow-x:auto;padding:2px;margin-bottom:14px;-webkit-overflow-scrolling:touch}
-  .day{flex-shrink:0;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;
-    font-family:inherit;font-size:12px;font-weight:500;color:var(--sub);text-align:center;line-height:1.3;transition:.15s}
-  .day b{display:block;font-size:13px;color:var(--ink)}
+
+  /* --- day filter --- */
+  .days{display:flex;gap:6px;overflow-x:auto;padding:2px;margin-bottom:14px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .days::-webkit-scrollbar{display:none}
+  .day{flex-shrink:0;padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;
+    font-family:inherit;font-size:11px;font-weight:500;color:var(--sub);text-align:center;line-height:1.3;transition:.15s}
+  .day b{display:block;font-size:12px;color:var(--ink)}
   .day.active{background:var(--maroon);border-color:var(--maroon)}
   .day.active b,.day.active{color:#fff}
-  .post{padding:16px 18px}
+
+  /* --- posts --- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+  .post{padding:14px 16px}
   .post .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
   .pnum{font-weight:700;font-size:15px;color:var(--maroon)}
   .pdate{font-size:11px;color:var(--faint)}
@@ -54,7 +63,12 @@
   .report{background:none;border:none;font-family:inherit;font-size:11px;color:var(--faint);cursor:pointer}
   .report:hover{color:var(--red)}
   .empty{text-align:center;color:var(--faint);font-size:14px;padding:36px 0}
-  .note{font-size:11px;color:var(--faint);text-align:center;margin-top:6px}
+
+  /* --- load more --- */
+  #loadMoreBtn{display:none;width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;
+    background:#fff;font-family:inherit;font-size:13px;font-weight:500;color:var(--sub);cursor:pointer;margin-top:4px;transition:.15s}
+  #loadMoreBtn:hover{border-color:var(--maroon);color:var(--maroon)}
+  #loadMoreBtn:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -62,29 +76,30 @@
   <header>
     <div class="eyebrow">Anonymous · No names · No logins</div>
     <h1>Confession Board</h1>
-    <p>Say it anonymously. Posts vanish after 7 days. Identified only by a post number.</p>
+    <p>Posts vanish after 7 days.</p>
   </header>
 
-  <div class="card"><div class="pad">
+  <div class="compose">
     <textarea id="text" maxlength="500" placeholder="Your confession or opinion… (max 500 characters)"></textarea>
-    <div class="cnt"><span id="cnt">0</span>/500</div>
-    <div class="filebar">
-      <label class="filebtn">📷 Add image (optional)<input type="file" id="img" accept=".jpg,.jpeg,.png,.webp" hidden></label>
+    <div class="compose-row">
+      <label class="filebtn">📷 Image<input type="file" id="img" accept=".jpg,.jpeg,.png,.webp" hidden></label>
       <span id="fileName"></span>
-      <button id="clearImg" onclick="clearImage()">✕ remove</button>
+      <button id="clearImg" onclick="clearImage()">✕</button>
+      <span class="cnt"><span id="cnt">0</span>/500</span>
+      <button class="btn" id="submitBtn" onclick="submitPost()">Submit anonymously</button>
     </div>
-    <button class="btn" id="submitBtn" onclick="submitPost()">Submit anonymously</button>
     <div class="msg" id="msg"></div>
-    <div class="note">Images are stripped of location/EXIF data. 1 post per 3 minutes.</div>
-  </div></div>
+  </div>
 
   <div class="days" id="days"></div>
   <div id="feed"></div>
+  <button id="loadMoreBtn" onclick="loadMore()">Load more posts</button>
 </div>
 
 <script>
 const txt=document.getElementById('text'),cnt=document.getElementById('cnt'),imgIn=document.getElementById('img');
-let selectedDay=null;
+let selectedDay=null, currentPage=1, hasMore=false, loading=false;
+
 txt.addEventListener('input',()=>cnt.textContent=txt.value.length);
 imgIn.addEventListener('change',()=>{
   const f=imgIn.files[0];
@@ -114,7 +129,7 @@ async function submitPost(){
 function buildDays(){
   const el=document.getElementById('days');
   const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  let html=`<button class="day ${selectedDay===null?'active':''}" onclick="pickDay(null)"><b>All</b>past week</button>`;
+  let html=`<button class="day ${selectedDay===null?'active':''}" onclick="pickDay(null)"><b>All</b>posts</button>`;
   for(let i=0;i<7;i++){
     const d=new Date();d.setDate(d.getDate()-i);
     const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -123,28 +138,57 @@ function buildDays(){
   }
   el.innerHTML=html;
 }
-function pickDay(d){selectedDay=d;buildDays();loadFeed();}
+function pickDay(d){selectedDay=d;buildDays();resetFeed();loadFeed();}
+
+function resetFeed(){currentPage=1;hasMore=false;document.getElementById('feed').innerHTML='';document.getElementById('loadMoreBtn').style.display='none';}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
 
 async function loadFeed(){
+  if(loading)return;
+  loading=true;
   const feed=document.getElementById('feed');
-  feed.innerHTML='<div class="empty">Loading…</div>';
+  const loadMoreBtn=document.getElementById('loadMoreBtn');
+  if(currentPage===1)feed.innerHTML='<div class="empty">Loading…</div>';
+  else{loadMoreBtn.disabled=true;loadMoreBtn.textContent='Loading…';}
   try{
-    const r=await fetch('/api/chat/posts'+(selectedDay?'?day='+selectedDay:''));
+    let url='/api/chat/posts?page='+currentPage;
+    if(selectedDay)url+='&day='+selectedDay;
+    const r=await fetch(url);
     const d=await r.json();
-    if(!d.success){feed.innerHTML='<div class="empty">Could not load posts.</div>';return;}
-    if(!d.posts.length){feed.innerHTML='<div class="empty">No confessions '+(selectedDay?'on this day':'yet')+'. Be the first 👀</div>';return;}
-    feed.innerHTML=d.posts.map(p=>`
+    if(!d.success){
+      if(currentPage===1)feed.innerHTML='<div class="empty">Could not load posts.</div>';
+      loading=false;return;
+    }
+    if(currentPage===1&&!d.posts.length){
+      feed.innerHTML='<div class="empty">No confessions '+(selectedDay?'on this day':'yet')+'. Be the first 👀</div>';
+      loadMoreBtn.style.display='none';loading=false;return;
+    }
+    if(currentPage===1)feed.innerHTML='';
+    feed.insertAdjacentHTML('beforeend',d.posts.map(p=>`
       <div class="card post">
         <div class="top"><span class="pnum">#${p.post_number}</span><span class="pdate">${fmtDate(p.created_at)}</span></div>
         <div class="ptext">${esc(p.text)}</div>
         ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="">`:''}
         <div class="pfoot"><button class="report" onclick="report(${p.id},this)">⚑ Report</button></div>
-      </div>`).join('');
-  }catch(e){feed.innerHTML='<div class="empty">Cannot reach server.</div>';}
+      </div>`).join(''));
+    hasMore=d.hasMore;
+    loadMoreBtn.style.display=hasMore?'block':'none';
+    loadMoreBtn.disabled=false;
+    loadMoreBtn.textContent='Load more posts';
+  }catch(e){
+    if(currentPage===1)feed.innerHTML='<div class="empty">Cannot reach server.</div>';
+  }
+  loading=false;
 }
+
+async function loadMore(){
+  if(!hasMore||loading)return;
+  currentPage++;
+  await loadFeed();
+}
+
 async function report(id,btn){
   if(!confirm('Report this post to the admin?'))return;
   try{
