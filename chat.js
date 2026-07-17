@@ -56,11 +56,60 @@ setInterval(() => {
 // req.ip respects Express "trust proxy" (set in server.js) and cannot be spoofed via arbitrary headers
 const clientIp = req => req.ip || req.socket.remoteAddress || 'unknown';
 
+// --- admin brute-force protection ---
+// Tracks { count, lockedUntil } per IP for failed admin auth attempts.
+const adminFailures = new Map();
+const ADMIN_MAX_ATTEMPTS = 5;          // failed attempts before lockout
+const ADMIN_LOCKOUT_MS  = 15 * 60 * 1000; // 15-minute lockout window
+const ADMIN_WINDOW_MS   = 15 * 60 * 1000; // rolling window for attempt counting
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, state] of adminFailures) {
+    if (state.lockedUntil && now > state.lockedUntil) adminFailures.delete(ip);
+    else if (!state.lockedUntil && now > state.windowStart + ADMIN_WINDOW_MS) adminFailures.delete(ip);
+  }
+}, 5 * 60 * 1000).unref();
+
+function recordAdminFailure(ip) {
+  const now = Date.now();
+  const state = adminFailures.get(ip) || { count: 0, windowStart: now, lockedUntil: null };
+  // Reset count if outside the rolling window (and not currently locked out)
+  if (!state.lockedUntil && now > state.windowStart + ADMIN_WINDOW_MS) {
+    state.count = 0;
+    state.windowStart = now;
+  }
+  state.count += 1;
+  if (state.count >= ADMIN_MAX_ATTEMPTS) {
+    state.lockedUntil = now + ADMIN_LOCKOUT_MS;
+    console.warn(`[admin] IP ${ip} locked out after ${state.count} failed attempts.`);
+  } else {
+    console.warn(`[admin] Failed attempt ${state.count}/${ADMIN_MAX_ATTEMPTS} from IP ${ip}.`);
+  }
+  adminFailures.set(ip, state);
+}
+
+function checkAdminLockout(ip) {
+  const state = adminFailures.get(ip);
+  if (!state || !state.lockedUntil) return null;
+  const remaining = state.lockedUntil - Date.now();
+  if (remaining <= 0) { adminFailures.delete(ip); return null; }
+  return Math.ceil(remaining / 60000); // minutes remaining
+}
+
 // --- admin auth ---
 function requireAdmin(req, res, next) {
+  const ip = clientIp(req);
+  const lockedMinutes = checkAdminLockout(ip);
+  if (lockedMinutes !== null) {
+    return res.status(429).json({ success: false, message: `Too many failed attempts. Try again in ${lockedMinutes} minute(s).` });
+  }
   const pass = req.headers['x-admin-password'];
   if (!process.env.ADMIN_PASSWORD) return res.status(500).json({ success: false, message: 'ADMIN_PASSWORD is not configured.' });
-  if (pass !== process.env.ADMIN_PASSWORD) return res.status(401).json({ success: false, message: 'Wrong password.' });
+  if (pass !== process.env.ADMIN_PASSWORD) {
+    recordAdminFailure(ip);
+    return res.status(401).json({ success: false, message: 'Wrong password.' });
+  }
   next();
 }
 

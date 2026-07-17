@@ -51,7 +51,7 @@
 </div>
 
 <script>
-let PASS=sessionStorage.getItem('adminPass')||'';
+let PASS='';
 function hdr(){return {'x-admin-password':PASS};}
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
@@ -64,12 +64,12 @@ async function login(){
   try{
     const r=await fetch('/api/chat/admin/login',{method:'POST',headers:{'x-admin-password':p}});
     const d=await r.json();
-    if(d.success){PASS=p;sessionStorage.setItem('adminPass',p);show();}
+    if(d.success){PASS=p;show();}
     else{err.style.display='block';err.textContent=d.message||'Wrong password.';}
   }catch(e){err.style.display='block';err.textContent='Cannot reach server.';}
   btn.disabled=false;
 }
-function logout(){PASS='';sessionStorage.removeItem('adminPass');
+function logout(){PASS='';
   document.getElementById('adminView').style.display='none';document.getElementById('loginView').style.display='block';}
 function show(){document.getElementById('loginView').style.display='none';
   document.getElementById('adminView').style.display='block';loadQueue();}
@@ -111,8 +111,6 @@ async function act(kind,id,confirmIt){
     await r.json();loadQueue();
   }catch(e){alert('Action failed. Try again.');}
 }
-if(PASS){fetch('/api/chat/admin/login',{method:'POST',headers:hdr()}).then(r=>r.json())
-  .then(d=>{if(d.success)show();else logout();}).catch(()=>{});}
 </script>
 </body>
 </html>
