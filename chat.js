@@ -119,8 +119,8 @@ async function purgeExpired() {
 }
 
 // --- pages ---
-router.get('/chat', (req, res) => res.sendFile(path.join(__dirname, 'chat.html')));
-router.get('/chat/admin', (req, res) => res.sendFile(path.join(__dirname, 'chat-admin.html')));
+router.get('/chat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat.html')));
+router.get('/chat/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat-admin.html')));
 
 // --- public API ---
 router.post('/api/chat/posts', (req, res) => {

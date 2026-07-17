@@ -11,7 +11,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(require('./chat'));
-app.use(express.static('.'));
+app.use(express.static('public'));
 
 const BASE  = 'http://103.171.190.44/TKRCET';
 const LOGIN = `${BASE}/`;
@@ -177,7 +177,8 @@ app.post('/login', loginLimiter, async (req, res) => {
     CACHE.set(roll.toUpperCase(), { at: Date.now(), data: result });
     return res.json(result);
   } catch (err) {
-    return res.json({ success: false, message: err.message });
+    console.error("[/login] scraper error:", err);
+    return res.json({ success: false, message: "Could not reach the attendance portal. Please try again." });
   }
 });
 
