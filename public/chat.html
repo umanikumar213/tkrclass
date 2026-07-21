@@ -58,7 +58,8 @@
   .pnum{font-weight:700;font-size:15px;color:var(--maroon)}
   .pdate{font-size:11px;color:var(--faint)}
   .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
-  .pimg{margin-top:10px;border-radius:10px;max-width:100%;display:block;border:1px solid var(--line)}
+  .pimg{margin-top:10px;border-radius:10px;max-width:100%;display:block;border:1px solid var(--line);opacity:0;transition:opacity .35s ease}
+  .pimg.loaded{opacity:1}
   .pfoot{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
   .report{background:none;border:none;font-family:inherit;font-size:11px;color:var(--faint);cursor:pointer}
   .report:hover{color:var(--red)}
@@ -213,7 +214,7 @@ async function loadFeed(){
       <div class="card post">
         <div class="top"><span class="pnum">#${p.post_number}</span><span class="pdate">${fmtDate(p.created_at)}</span></div>
         <div class="ptext">${esc(p.text)}</div>
-        ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="">`:''}
+        ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="" onload="this.classList.add('loaded')">`:''}
         ${reactRow(p)}
         <div class="pfoot"><span></span><button class="report" onclick="report(${p.id},this)">⚑ Report</button></div>
       </div>`).join(''));
