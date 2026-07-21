@@ -59,10 +59,19 @@
   .pdate{font-size:11px;color:var(--faint)}
   .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
   .pimg{margin-top:10px;border-radius:10px;max-width:100%;display:block;border:1px solid var(--line)}
-  .pfoot{margin-top:10px;text-align:right}
+  .pfoot{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
   .report{background:none;border:none;font-family:inherit;font-size:11px;color:var(--faint);cursor:pointer}
   .report:hover{color:var(--red)}
   .empty{text-align:center;color:var(--faint);font-size:14px;padding:36px 0}
+
+  /* --- reactions --- */
+  .reactions{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .rbtn{display:inline-flex;align-items:center;gap:3px;padding:5px 9px;border:1px solid var(--line);
+    border-radius:20px;background:#fff;font-family:inherit;font-size:14px;cursor:pointer;
+    color:var(--sub);transition:.12s;white-space:nowrap;line-height:1}
+  .rbtn:hover{border-color:var(--gold);background:var(--gold-soft)}
+  .rbtn.sel{background:var(--gold-soft);border-color:var(--gold);color:var(--maroon)}
+  .rbtn span{font-size:12px;font-weight:500}
 
   /* --- load more --- */
   #loadMoreBtn{display:none;width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;
@@ -145,6 +154,40 @@ function resetFeed(){currentPage=1;hasMore=false;document.getElementById('feed')
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
 
+// --- reactions ---
+const EMOJIS=[['heart','❤️'],['laugh','😂'],['wow','😮'],['sad','😢'],['fire','🔥'],['up','👍']];
+function getReaction(id){return localStorage.getItem('react_'+id)||null;}
+function setReaction(id,emoji){if(emoji)localStorage.setItem('react_'+id,emoji);else localStorage.removeItem('react_'+id);}
+
+function reactRow(p){
+  const cur=getReaction(p.id);
+  return '<div class="reactions">'+EMOJIS.map(([k,e])=>
+    `<button class="rbtn${cur===k?' sel':''}" onclick="react(${p.id},'${k}',this.closest('.reactions'))">${e} <span>${p['react_'+k]||0}</span></button>`
+  ).join('')+'</div>';
+}
+
+async function react(id,tapped,container){
+  const prev=getReaction(id);
+  const emoji=tapped===prev?null:tapped; // null = toggle off
+  // Optimistic update
+  const btns=container.querySelectorAll('.rbtn');
+  EMOJIS.forEach(([k],i)=>{
+    const span=btns[i].querySelector('span');
+    let c=parseInt(span.textContent,10)||0;
+    if(k===prev&&prev!==emoji)c=Math.max(0,c-1);
+    if(k===emoji)c++;
+    span.textContent=c;
+    btns[i].classList.toggle('sel',k===emoji);
+  });
+  setReaction(id,emoji);
+  try{
+    await fetch('/api/chat/posts/'+id+'/react',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({emoji,prev})
+    });
+  }catch(e){}
+}
+
 async function loadFeed(){
   if(loading)return;
   loading=true;
@@ -171,7 +214,8 @@ async function loadFeed(){
         <div class="top"><span class="pnum">#${p.post_number}</span><span class="pdate">${fmtDate(p.created_at)}</span></div>
         <div class="ptext">${esc(p.text)}</div>
         ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="">`:''}
-        <div class="pfoot"><button class="report" onclick="report(${p.id},this)">⚑ Report</button></div>
+        ${reactRow(p)}
+        <div class="pfoot"><span></span><button class="report" onclick="report(${p.id},this)">⚑ Report</button></div>
       </div>`).join(''));
     hasMore=d.hasMore;
     loadMoreBtn.style.display=hasMore?'block':'none';

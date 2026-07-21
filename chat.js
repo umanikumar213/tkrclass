@@ -32,6 +32,16 @@ async function initDb() {
     INSERT INTO confession_counter (name, value) VALUES ('post_number', 0)
       ON CONFLICT (name) DO NOTHING;
   `);
+  // Add reaction columns to existing DB (safe: IF NOT EXISTS is idempotent)
+  await pool.query(`
+    ALTER TABLE confessions
+      ADD COLUMN IF NOT EXISTS react_heart INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_laugh INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_wow   INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_sad   INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_fire  INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_up    INTEGER NOT NULL DEFAULT 0;
+  `);
   console.log('[chat] DB schema ready');
 }
 const router = express.Router();
@@ -182,7 +192,8 @@ router.get('/api/chat/posts', async (req, res) => {
       where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`;
     }
     const { rows } = await pool.query(
-      `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at
+      `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at,
+              react_heart, react_laugh, react_wow, react_sad, react_fire, react_up
        FROM confessions WHERE ${where} ORDER BY post_number DESC
        LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`,
       params);
@@ -209,6 +220,27 @@ router.get('/api/chat/image/:id', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=300');
     res.send(rows[0].image_data);
   } catch { res.status(500).end(); }
+});
+
+const VALID_EMOJIS = new Set(['heart','laugh','wow','sad','fire','up']);
+router.post('/api/chat/posts/:id/react', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const { emoji, prev } = req.body; // emoji = new (null = remove), prev = old (null = none)
+    if (emoji != null && !VALID_EMOJIS.has(emoji)) return res.status(400).json({ success: false });
+    if (prev  != null && !VALID_EMOJIS.has(prev))  return res.status(400).json({ success: false });
+    const sets = [];
+    if (prev != null) sets.push(`react_${prev} = GREATEST(0, react_${prev} - 1)`);
+    if (emoji != null) sets.push(`react_${emoji} = react_${emoji} + 1`);
+    if (!sets.length) return res.json({ success: true });
+    await pool.query(
+      `UPDATE confessions SET ${sets.join(', ')} WHERE id = $1 AND status = 'approved'`, [id]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('react error:', e.message);
+    res.status(500).json({ success: false });
+  }
 });
 
 router.post('/api/chat/posts/:id/report', async (req, res) => {
