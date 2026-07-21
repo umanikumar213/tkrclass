@@ -4,6 +4,20 @@ const sharp = require('sharp');
 const { Pool } = require('pg');
 const path = require('path');
 
+// --- feed cache (5-minute TTL, invalidated immediately on admin actions) ---
+const FEED_CACHE_TTL = 300_000; // 300 seconds in ms
+const feedCache = new Map();    // key → { data, expiresAt }
+function invalidateFeedCache() { feedCache.clear(); }
+function getFeedCache(key) {
+  const entry = feedCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { feedCache.delete(key); return null; }
+  return entry.data;
+}
+function setFeedCache(key, data) {
+  feedCache.set(key, { data, expiresAt: Date.now() + FEED_CACHE_TTL });
+}
+
 // Railway (and most hosted PG) require SSL; Replit dev works without it.
 // rejectUnauthorized:false handles self-signed certs on Railway's internal PG.
 const pool = new Pool({
@@ -123,9 +137,10 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// delete posts older than 7 days (rolling, per post)
+// delete posts older than 7 days (rolling, per post); clear cache so expired posts vanish
 async function purgeExpired() {
-  await pool.query(`DELETE FROM confessions WHERE created_at < NOW() - INTERVAL '7 days'`);
+  const { rowCount } = await pool.query(`DELETE FROM confessions WHERE created_at < NOW() - INTERVAL '7 days'`);
+  if (rowCount > 0) invalidateFeedCache();
 }
 
 // --- pages ---
@@ -187,14 +202,17 @@ router.get('/api/chat/posts', async (req, res) => {
     await purgeExpired();
     const PAGE_SIZE = 20;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const offset = (page - 1) * PAGE_SIZE;
+    const day  = (req.query.day && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day)) ? req.query.day : '';
 
+    const cacheKey = `p${page}|d${day}`;
+    const cached = getFeedCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const offset = (page - 1) * PAGE_SIZE;
     const params = [];
     let where = `status = 'approved'`;
-    if (req.query.day && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day)) {
-      params.push(req.query.day);
-      where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`;
-    }
+    if (day) { params.push(day); where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`; }
+
     const { rows } = await pool.query(
       `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at,
               react_heart, react_laugh, react_wow, react_sad, react_fire, react_up
@@ -202,7 +220,9 @@ router.get('/api/chat/posts', async (req, res) => {
        LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`,
       params);
     const hasMore = rows.length > PAGE_SIZE;
-    res.json({ success: true, posts: rows.slice(0, PAGE_SIZE), hasMore, page });
+    const payload = { success: true, posts: rows.slice(0, PAGE_SIZE), hasMore, page };
+    setFeedCache(cacheKey, payload);
+    res.json(payload);
   } catch (e) {
     console.error('feed error:', e.message);
     res.status(500).json({ success: false, message: 'Could not load posts.' });
@@ -286,6 +306,7 @@ router.post('/api/chat/admin/approve/:id', requireAdmin, async (req, res) => {
     const num = c.rows[0].value;
     await client.query(`UPDATE confessions SET status = 'approved', post_number = $1 WHERE id = $2`, [num, id]);
     await client.query('COMMIT');
+    invalidateFeedCache();
     res.json({ success: true, postNumber: num });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -300,6 +321,7 @@ router.post('/api/chat/admin/reject/:id', requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await pool.query(`DELETE FROM confessions WHERE id = $1`, [id]);
+    invalidateFeedCache();
     res.json({ success: true });
   } catch { res.status(500).json({ success: false, message: 'Delete failed.' }); }
 });
