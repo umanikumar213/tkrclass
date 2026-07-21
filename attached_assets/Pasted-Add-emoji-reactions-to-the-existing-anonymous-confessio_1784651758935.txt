@@ -1,0 +1,52 @@
+Add emoji reactions to the existing anonymous confession board at /chat.
+
+REACTIONS:
+- Every approved post in the public feed gets a row of 6 reaction buttons:
+  ❤️  😂  😮  😢  🔥  👍
+- Each button shows its own count next to it (e.g. "❤️ 12   😂 5   😮 0 ...").
+- Tapping a button selects that reaction for that post: it increments that emoji's
+  count by 1 and shows the button as "selected" (highlighted) for that user.
+
+ONE REACTION PER POST PER PERSON:
+- A user may have only ONE reaction on a given post at a time — NOT multiple.
+- If the user has already reacted with one emoji and taps a DIFFERENT emoji on the
+  same post, switch their reaction: decrement the old emoji's count by 1 and
+  increment the new emoji's count by 1. Only the newly tapped emoji stays selected.
+- If the user taps the SAME emoji they already selected, remove their reaction
+  entirely (decrement that count by 1, nothing selected). So tapping toggles off.
+- End result: each person contributes at most 1 to the total reactions on any post.
+
+CRITICAL — REACTIONS ARE COSMETIC ONLY:
+- Reaction counts must NEVER reorder or rank the feed. The feed stays strictly
+  newest-first (reverse chronological) at all times, exactly as it is now.
+- Do not add any "most liked" sorting, no "top posts", no trending. The numbers are
+  purely decorative. This is intentional — it removes any incentive to spam reactions.
+
+NO LOGIN, STAY ANONYMOUS:
+- Do NOT add any login or username for reactions. Keep the board fully anonymous.
+- Track which single emoji a user picked on each post using browser localStorage
+  (store post ID + the one emoji they chose). This is what makes the button show as
+  "selected" when they return, and what enforces the one-reaction-per-post rule.
+- Note: someone using incognito or clearing storage could react again — that is fine
+  and expected. Because counts don't affect ranking, this has no payoff, so no
+  server-side identity check is needed.
+
+DATABASE:
+- Add reaction count columns to the existing posts table, one integer per emoji:
+  react_heart, react_laugh, react_wow, react_sad, react_fire, react_up
+  (all default 0).
+- When a reaction is added, switched, or removed, update the matching counts in
+  PostgreSQL so totals persist across redeploys, just like posts and images already do.
+- When a post is deleted (rejected, or expired after 7 days), its reaction counts go
+  with it automatically since they live on the same row — confirm nothing is left behind.
+
+DESIGN:
+- Match the existing maroon (#7B1800) and gold (#E8A000) theme.
+- Reaction buttons should be a clean horizontal row under each post, mobile-friendly
+  and easy to tap with a thumb.
+- The user's currently selected reaction should be visually clear (e.g. highlighted
+  background or a subtle border) so they can see which one they picked.
+
+Do NOT change anything else about the board — anonymous posting, admin approval,
+reject/expiry deletion, calendar view, report button, and rate limiting all stay
+exactly as they are. This is purely adding the reaction row to existing posts.
