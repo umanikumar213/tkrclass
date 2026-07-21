@@ -152,15 +152,19 @@ router.post('/api/chat/posts', (req, res) => {
 
       let imageData = null, imageType = null;
       if (req.file) {
-        // Re-encode with sharp: strips ALL metadata (EXIF/GPS) for privacy
+        // Re-encode with sharp: strips ALL metadata (EXIF/GPS) for privacy,
+        // resizes to max 1200×1200, and compresses to ~75% quality (~400 KB target).
+        const MAX_PX = 1200;
+        const QUALITY = 75;
+        const resizeOpts = { width: MAX_PX, height: MAX_PX, fit: 'inside', withoutEnlargement: true };
         if (req.file.mimetype === 'image/png') {
-          imageData = await sharp(req.file.buffer).rotate().png().toBuffer();
+          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).png({ quality: QUALITY, compressionLevel: 8 }).toBuffer();
           imageType = 'image/png';
         } else if (req.file.mimetype === 'image/webp') {
-          imageData = await sharp(req.file.buffer).rotate().webp({ quality: 85 }).toBuffer();
+          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).webp({ quality: QUALITY }).toBuffer();
           imageType = 'image/webp';
         } else {
-          imageData = await sharp(req.file.buffer).rotate().jpeg({ quality: 85 }).toBuffer();
+          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).jpeg({ quality: QUALITY, mozjpeg: true }).toBuffer();
           imageType = 'image/jpeg';
         }
       }
