@@ -320,7 +320,7 @@ function sim(){
 }
 function buildBunk(){
   const C=DATA.summary.conducted,P=DATA.summary.present;
-  const sc=[['Miss 1 class',1],['Miss 1 day (6)',6],['Miss 2 days (12)',12]];
+  const sc=[['Miss 1 class',1],['Miss half day (3)',3],['Miss 1 day (6)',6]];
   document.getElementById('bunkRows').innerHTML=sc.map(([label,miss])=>{
     const after=(C+miss)?(P/(C+miss)*100):0;const drop=(P/C*100)-after;
     const col=after<65?'var(--red)':(after<75?'var(--amber)':'var(--green)');

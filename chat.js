@@ -56,6 +56,17 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS react_fire  INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS react_up    INTEGER NOT NULL DEFAULT 0;
   `);
+  // Comments table – cascades with the parent post
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS confession_comments (
+      id            SERIAL PRIMARY KEY,
+      confession_id INTEGER NOT NULL REFERENCES confessions(id) ON DELETE CASCADE,
+      text          VARCHAR(280) NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_comments_post ON confession_comments(confession_id);
+  `);
   console.log('[chat] DB schema ready');
 }
 const router = express.Router();
@@ -215,7 +226,9 @@ router.get('/api/chat/posts', async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at,
-              react_heart, react_laugh, react_wow, react_sad, react_fire, react_up
+              react_heart, react_laugh, react_wow, react_sad, react_fire, react_up,
+              (SELECT COUNT(*) FROM confession_comments cc
+               WHERE cc.confession_id = confessions.id AND cc.status = 'approved') AS comment_count
        FROM confessions WHERE ${where} ORDER BY post_number DESC
        LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`,
       params);
@@ -276,6 +289,45 @@ router.post('/api/chat/posts/:id/report', async (req, res) => {
   } catch { res.status(500).json({ success: false }); }
 });
 
+// --- comments (public) ---
+const lastComment = new Map();
+const COMMENT_RATE_MS = 60_000; // 1 comment per minute per IP
+
+router.get('/api/chat/posts/:id/comments', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const { rows } = await pool.query(
+      `SELECT id, text, created_at FROM confession_comments
+       WHERE confession_id = $1 AND status = 'approved' ORDER BY created_at ASC`, [id]);
+    res.json({ success: true, comments: rows });
+  } catch { res.status(500).json({ success: false }); }
+});
+
+router.post('/api/chat/posts/:id/comments', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const ip = clientIp(req);
+    const last = lastComment.get(ip);
+    if (last && Date.now() - last < COMMENT_RATE_MS) {
+      const wait = Math.ceil((COMMENT_RATE_MS - (Date.now() - last)) / 1000);
+      return res.status(429).json({ success: false, message: `Please wait ${wait}s before commenting again.` });
+    }
+    const text = (req.body.text || '').trim();
+    if (!text) return res.status(400).json({ success: false, message: 'Comment cannot be empty.' });
+    if (text.length > 280) return res.status(400).json({ success: false, message: 'Max 280 characters.' });
+    const check = await pool.query(`SELECT id FROM confessions WHERE id = $1 AND status = 'approved'`, [id]);
+    if (!check.rows.length) return res.status(404).json({ success: false, message: 'Post not found.' });
+    await pool.query(`INSERT INTO confession_comments (confession_id, text) VALUES ($1, $2)`, [id, text]);
+    lastComment.set(ip, Date.now());
+    res.json({ success: true, message: 'Comment submitted for approval.' });
+  } catch (e) {
+    console.error('comment submit error:', e.message);
+    res.status(500).json({ success: false, message: 'Something went wrong.' });
+  }
+});
+
 // --- admin API ---
 router.post('/api/chat/admin/login', requireAdmin, (req, res) => res.json({ success: true }));
 
@@ -333,6 +385,38 @@ router.post('/api/chat/admin/unflag/:id', requireAdmin, async (req, res) => {
     await pool.query(`UPDATE confessions SET reported = FALSE WHERE id = $1`, [id]);
     res.json({ success: true });
   } catch { res.status(500).json({ success: false }); }
+});
+
+// --- admin comment review ---
+router.get('/api/chat/admin/comments-queue', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT cc.id, cc.text, cc.created_at,
+              c.text AS post_text, c.post_number
+       FROM confession_comments cc
+       JOIN confessions c ON c.id = cc.confession_id
+       WHERE cc.status = 'pending' ORDER BY cc.created_at ASC`);
+    res.json({ success: true, comments: rows });
+  } catch { res.status(500).json({ success: false }); }
+});
+
+router.post('/api/chat/admin/approve-comment/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    await pool.query(`UPDATE confession_comments SET status = 'approved' WHERE id = $1`, [id]);
+    invalidateFeedCache(); // comment_count in feed changes
+    res.json({ success: true });
+  } catch { res.status(500).json({ success: false, message: 'Approve failed.' }); }
+});
+
+router.post('/api/chat/admin/reject-comment/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    await pool.query(`DELETE FROM confession_comments WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch { res.status(500).json({ success: false, message: 'Reject failed.' }); }
 });
 
 router.initDb = initDb;
