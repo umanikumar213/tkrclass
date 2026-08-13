@@ -159,6 +159,10 @@
           </div>
     <label for="roll">Roll number</label>
     <input id="roll" placeholder="ENTER YOUR ROLL NUMBER" autocomplete="off" />
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--sub);cursor:pointer;user-select:none">
+      <input type="checkbox" id="rememberMe" style="width:16px;height:16px;accent-color:#4f46e5;cursor:pointer">
+      Remember my roll number
+    </label>
     <button class="btn" id="btn" onclick="go()">View attendance</button>
     <div class="loader" id="loader">
       <span class="spin"></span>
@@ -263,6 +267,8 @@ async function go(){
     const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rollNumber:roll})});
     const d=await r.json();done();
     if(!d.success){err.style.display='block';err.textContent=d.message;return;}
+    if(document.getElementById('rememberMe').checked)localStorage.setItem('savedRoll',roll.toUpperCase());
+    else localStorage.removeItem('savedRoll');
     DATA=d;render(d);
   }catch(e){done();err.style.display='block';err.textContent='Cannot reach server. Please try again.';}
 }
@@ -349,10 +355,16 @@ function calc(){
 function logout(){
   document.getElementById('result').style.display='none';document.getElementById('loginBox').style.display='block';
   var tg=document.getElementById('tagline'); if(tg) tg.style.display='block';
-  document.getElementById('roll').value='';document.getElementById('out').style.display='none';
+  const sv=localStorage.getItem('savedRoll');document.getElementById('roll').value=sv||'';document.getElementById('out').style.display='none';
   document.getElementById('prog').style.strokeDashoffset=CIRC;document.getElementById('simRange').value=0;DATA=null;
 }
 document.getElementById('roll').addEventListener('keypress',e=>{if(e.key==='Enter')go();});
+
+// --- Remember roll number ---
+(function(){
+  const saved=localStorage.getItem('savedRoll');
+  if(saved){document.getElementById('roll').value=saved;document.getElementById('rememberMe').checked=true;}
+})();
 </script>
 </body>
 </html>
