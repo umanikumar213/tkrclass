@@ -160,7 +160,8 @@ app.post('/login', loginLimiter, async (req, res) => {
           days.push({ date: dateTxt, weekday, periods: periods.slice(0, 6) });
         });
 
-        if (days.length) latestDay = days[0]; // table is newest-first
+        if (days.length) latestDay = days[0]; // table is newest-first (kept for compat)
+        var recentDays = days.slice(0, 7);   // up to last 7 days
 
         // Streak: from newest day backwards, count days where EVERY real period is Present.
         // A single Absent period breaks it. Days with no marked periods (all dash) are skipped.
@@ -173,7 +174,7 @@ app.post('/login', loginLimiter, async (req, res) => {
       }
     }
 
-    const result = { success: true, rollNo: roll_no, name, overall, summary, perSubject, latestDay, streak };
+    const result = { success: true, rollNo: roll_no, name, overall, summary, perSubject, latestDay, recentDays, streak };
     CACHE.set(roll.toUpperCase(), { at: Date.now(), data: result });
     return res.json(result);
   } catch (err) {
