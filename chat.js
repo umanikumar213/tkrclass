@@ -515,8 +515,11 @@ router.post('/api/chat/posts/:id/react', async (req, res) => {
     if (prev != null) sets.push(`react_${prev} = GREATEST(0, react_${prev} - 1)`);
     if (emoji != null) sets.push(`react_${emoji} = react_${emoji} + 1`);
     if (!sets.length) return res.json({ success: true });
-    await pool.query(
-      `UPDATE confessions SET ${sets.join(', ')} WHERE id = $1 AND status = 'approved'`, [id]);
+    const result = await pool.query(
+      `UPDATE confessions SET ${sets.join(', ')} WHERE id = $1 AND status = 'approved'
+       RETURNING id`, [id]);
+    if (!result.rows.length) return res.status(404).json({ success: false });
+    invalidateFeedCache();
     res.json({ success: true });
   } catch (e) {
     console.error('react error:', e.message);
