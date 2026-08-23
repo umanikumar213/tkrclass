@@ -148,12 +148,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// delete posts older than 7 days (rolling, per post); clear cache so expired posts vanish
-async function purgeExpired() {
-  const { rowCount } = await pool.query(`DELETE FROM confessions WHERE created_at < NOW() - INTERVAL '7 days'`);
-  if (rowCount > 0) invalidateFeedCache();
-}
-
 // --- pages ---
 router.get('/chat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat.html')));
 router.get('/chat/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat-admin.html')));
@@ -210,8 +204,7 @@ router.post('/api/chat/posts', (req, res) => {
 
 router.get('/api/chat/posts', async (req, res) => {
   try {
-    await purgeExpired();
-    const PAGE_SIZE = 20;
+    const PAGE_SIZE = 10;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const day  = (req.query.day && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day)) ? req.query.day : '';
 
@@ -333,7 +326,6 @@ router.post('/api/chat/admin/login', requireAdmin, (req, res) => res.json({ succ
 
 router.get('/api/chat/admin/queue', requireAdmin, async (req, res) => {
   try {
-    await purgeExpired();
     const { rows } = await pool.query(
       `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, status, reported, created_at
        FROM confessions WHERE status = 'pending' OR reported = TRUE ORDER BY created_at ASC`);
