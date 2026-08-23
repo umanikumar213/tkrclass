@@ -11,6 +11,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(require('./chat'));
+app.use(require('./reyi'));
 app.use(express.static('public'));
 
 const BASE  = 'http://103.171.190.44/TKRCET';
@@ -185,6 +186,7 @@ app.post('/login', loginLimiter, async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 const { initDb } = require('./chat');
-initDb()
+const { initReyiDb } = require('./reyi');
+Promise.all([initDb(), initReyiDb()])
   .then(() => app.listen(PORT, () => console.log('✅ Server running on port ' + PORT)))
   .catch(err => { console.error('❌ DB init failed, refusing to start:', err.message); process.exit(1); });

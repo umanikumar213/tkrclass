@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reyi · Admin</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0a0a0c;--surface:#151318;--line:#302b35;--text:#e8e6e3;--muted:#aaa3ae;--dim:#706a75;--ember:#ff6a3d;--indigo:#8a7cff;--danger:#ff7979;--success:#55c989}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;background:radial-gradient(ellipse at 50% -15%,#211a32 0%,transparent 42%),var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+  .shell{width:min(100%,720px);margin:0 auto;padding:28px 16px 80px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+  h1{font:400 29px 'DM Serif Display',Georgia,serif}
+  h1 span{font:600 10px Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-left:7px}
+  .link{border:0;background:none;color:var(--muted);font:500 12px Inter,sans-serif;cursor:pointer;text-decoration:underline}
+  .card{background:linear-gradient(145deg,#18151c,#111015);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 14px 32px #0003}
+  input{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px;background:#0d0c10;color:var(--text);font:400 14px Inter,sans-serif;outline:none}
+  input:focus{border-color:#8a7cff99;box-shadow:0 0 0 3px #8a7cff20}
+  .primary{width:100%;margin-top:12px;border:0;border-radius:10px;padding:11px;background:linear-gradient(135deg,#ff6a3d,#c64261);color:#fff;font:600 13px Inter,sans-serif;cursor:pointer}
+  .error{display:none;margin-top:10px;padding:8px 10px;background:#ff79791c;color:#ff9c9c;border-radius:8px;font-size:12px}
+  .error.show{display:block}
+  .queue-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 12px}
+  .type{display:inline-block;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+  .type.video{color:#ffd2c3;background:#ff6a3d1d;border:1px solid #ff6a3d55}.type.story{color:#dbd4ff;background:#8a7cff1d;border:1px solid #8a7cff55}
+  .meta{float:right;font-size:11px;color:var(--dim);padding-top:3px}
+  .category{font-size:11px;color:#d8d0ff;background:#8a7cff1b;border:1px solid #8a7cff44;border-radius:999px;padding:4px 7px;margin-left:5px}
+  .caption{font:400 21px/1.28 'DM Serif Display',Georgia,serif;margin:3px 0 11px}
+  .story{font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:#d8d3d8}
+  .frame{margin-top:12px;aspect-ratio:16/9;background:#08080a;border-radius:11px;overflow:hidden}
+  iframe{height:100%;width:100%;border:0}
+  .image{display:block;max-width:100%;max-height:400px;object-fit:cover;border-radius:11px;border:1px solid var(--line);margin-top:12px}
+  .actions{display:flex;gap:8px;margin-top:16px}
+  .action{flex:1;border:0;border-radius:9px;padding:10px;font:600 12px Inter,sans-serif;cursor:pointer;color:white}
+  .approve{background:#237c50}.reject{background:#a53e4b}
+  .empty{text-align:center;padding:42px 12px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main class="shell">
+  <section id="loginView">
+    <div class="top"><h1>Reyi <span>moderation</span></h1></div>
+    <form class="card" onsubmit="event.preventDefault();login()">
+      <input id="password" type="password" placeholder="Admin password">
+      <button id="loginButton" class="primary" type="submit">Open review queue</button>
+      <div id="error" class="error"></div>
+    </form>
+  </section>
+  <section id="adminView" class="hidden" style="display:none">
+    <div class="top"><h1>Reyi <span>review queue</span></h1><button class="link" onclick="logout()">Logout</button></div>
+    <div id="queue"></div>
+  </section>
+</main>
+<script>
+  let password='';
+  const esc=value=>{const d=document.createElement('div');d.textContent=value||'';return d.innerHTML;};
+  const attr=value=>esc(value).replace(/"/g,'&quot;');
+  const formatDate=value=>new Date(value).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+  const headers=()=>({'x-admin-password':password});
+
+  async function login(){
+    const value=document.getElementById('password').value;
+    const error=document.getElementById('error');
+    error.className='error';
+    if(!value){error.textContent='Enter the password.';error.classList.add('show');return;}
+    const button=document.getElementById('loginButton');
+    button.disabled=true;
+    try{
+      const response=await fetch('/api/reyi/admin/login',{method:'POST',headers:{'x-admin-password':value}});
+      const data=await response.json();
+      if(!data.success){error.textContent=data.message||'Could not log in.';error.classList.add('show');return;}
+      password=value;
+      document.getElementById('loginView').style.display='none';
+      document.getElementById('adminView').style.display='block';
+      loadQueue();
+    }catch{error.textContent='Could not reach the server.';error.classList.add('show');}
+    finally{button.disabled=false;}
+  }
+
+  function logout(){
+    password='';
+    document.getElementById('adminView').style.display='none';
+    document.getElementById('loginView').style.display='block';
+  }
+
+  function postMarkup(post){
+    const caption=post.caption?`<div class="caption">${esc(post.caption)}</div>`:'';
+    const content=post.post_type==='video'
+      ?`<div class="frame"><iframe src="${attr(post.video_url)}" title="Submitted Reyi video" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+      :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="image protected-image" data-src="/api/reyi/image/${post.id}" alt="Story attachment">`:''}`;
+    return `<article class="card">
+      <span class="type ${post.post_type}">${post.post_type}</span>
+      <span class="meta">${formatDate(post.created_at)}</span>
+      <span class="category">${esc(post.category)}</span>
+      ${caption}${content}
+      <div class="actions">
+        <button class="action approve" onclick="moderate('approve',${post.id})">Approve · 7 days</button>
+        <button class="action reject" onclick="moderate('reject',${post.id})">Reject</button>
+      </div>
+    </article>`;
+  }
+
+  async function loadQueue(){
+    const queue=document.getElementById('queue');
+    queue.innerHTML='<div class="empty">Loading submissions…</div>';
+    try{
+      const response=await fetch('/api/reyi/admin/queue',{headers:headers()});
+      if(response.status===401){logout();return;}
+      const data=await response.json();
+      const posts=data.posts||[];
+      queue.innerHTML=posts.length?`<div class="queue-title">${posts.length} pending ${posts.length===1?'submission':'submissions'}</div>${posts.map(postMarkup).join('')}`:'<div class="empty">Nothing to review tonight.</div>';
+      document.querySelectorAll('.protected-image').forEach(async image=>{
+        try{
+          const response=await fetch(image.dataset.src,{headers:headers()});
+          if(response.ok)image.src=URL.createObjectURL(await response.blob());else image.remove();
+        }catch{image.remove();}
+      });
+    }catch{queue.innerHTML='<div class="empty">Could not load the queue.</div>';}
+  }
+
+  async function moderate(action,id){
+    if(action==='reject'&&!confirm('Reject this submission? It will remain hidden.'))return;
+    try{
+      const response=await fetch(`/api/reyi/admin/${action}/${id}`,{method:'POST',headers:headers()});
+      if(response.status===401){logout();return;}
+      const data=await response.json();
+      if(!data.success){alert(data.message||'Action failed.');return;}
+      loadQueue();
+    }catch{alert('Action failed. Try again.');}
+  }
+</script>
+</body>
+</html>

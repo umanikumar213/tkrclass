@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reyi · రేయి</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0a0a0c;--surface:#141317;--surface-2:#1c1920;--line:#302b35;--text:#e8e6e3;--muted:#aaa3ae;--dim:#706a75;--ember:#ff6a3d;--indigo:#8a7cff;--gold:#ffbf69;--danger:#ff7979}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--bg)}
+  body{min-height:100vh;background:radial-gradient(ellipse at 50% -10%,#201933 0%,transparent 42%),var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;line-height:1.5;transition:background 600s linear,color .5s ease}
+  body.dawn{background:radial-gradient(ellipse at 50% -15%,#8b5262 0%,#272343 35%,#100f1a 66%,#0a0a0c 100%)}
+  .shell{width:min(100%,620px);margin:0 auto;padding:28px 16px 70px}
+  .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+  .brand-mark{display:flex;align-items:center;gap:10px}
+  .moon{height:34px;width:34px;border-radius:50%;background:linear-gradient(135deg,#fff2ca,#d8c5ff 70%);box-shadow:inset -8px -5px 0 #8c75c6,0 0 30px #8a7cff4d}
+  h1{font:400 30px/1 'DM Serif Display',Georgia,serif;letter-spacing:.01em}
+  h1 span{font-family:Inter,sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-left:6px}
+  .hours{font-size:11px;font-weight:600;letter-spacing:.07em;color:var(--gold);text-transform:uppercase}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gold)}
+  .panel{background:linear-gradient(145deg,#17151b,#100f13);border:1px solid var(--line);border-radius:20px;box-shadow:0 18px 40px #0004}
+  .locked{min-height:510px;display:flex;align-items:center;justify-content:center;text-align:center;padding:32px}
+  .lock-icon{font-size:38px;margin-bottom:16px;filter:drop-shadow(0 0 18px #ff6a3d55)}
+  .locked h2{font:400 31px/1.1 'DM Serif Display',Georgia,serif;margin-bottom:10px}
+  .locked p{font-size:14px;color:var(--muted);max-width:290px;margin:0 auto}
+  .countdown{font-variant-numeric:tabular-nums;font-size:28px;font-weight:600;letter-spacing:.05em;color:var(--text);margin:22px 0 8px}
+  .small-copy{font-size:12px!important;color:var(--dim)!important;font-style:italic}
+  .hidden{display:none!important}
+  .intro{margin:-10px 0 20px;color:var(--muted);font-size:13px}
+  .intro b{color:var(--text);font-weight:500}
+  .composer{padding:16px;margin-bottom:18px;transition:box-shadow .5s ease,border-color .5s ease}
+  .composer:focus-within{border-color:#8a7cff77;box-shadow:0 0 0 1px #8a7cff44,0 0 28px #8a7cff22}
+  .type-switch{display:grid;grid-template-columns:1fr 1fr;background:#0c0b0e;border:1px solid var(--line);padding:3px;border-radius:11px;margin-bottom:14px}
+  .type-btn{border:0;border-radius:8px;padding:9px;background:transparent;color:var(--muted);font:600 12px Inter,sans-serif;cursor:pointer;transition:.4s ease}
+  .type-btn.active{background:var(--surface-2);color:var(--text);box-shadow:0 3px 12px #0005}
+  label{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin:12px 0 6px}
+  select,input,textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:#0d0c10;color:var(--text);font:400 14px Inter,sans-serif;outline:none;padding:10px 11px;transition:.3s ease}
+  textarea{min-height:112px;resize:vertical;line-height:1.55}
+  select:focus,input:focus,textarea:focus{border-color:#8a7cff99;box-shadow:0 0 0 3px #8a7cff20}
+  option{background:#15131a}
+  .field-note{font-size:11px;color:var(--dim);margin-top:5px}
+  .image-row{display:flex;align-items:center;gap:8px;margin-top:12px}
+  .file-label{display:inline-flex;align-items:center;gap:6px;border:1px dashed #574d60;color:var(--muted);font-size:12px;font-weight:500;padding:8px 10px;border-radius:9px;cursor:pointer}
+  .file-label:hover{border-color:var(--indigo);color:var(--text)}
+  #imageName{font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .submit-row{display:flex;align-items:center;gap:10px;margin-top:14px}
+  .submit{flex:1;border:0;border-radius:10px;padding:11px 14px;background:linear-gradient(135deg,#ff6a3d,#c64261);color:#fff;font:600 13px Inter,sans-serif;cursor:pointer;transition:.4s ease}
+  .submit:hover{filter:brightness(1.1);box-shadow:0 8px 22px #ff6a3d33}
+  .submit:disabled{opacity:.55;cursor:not-allowed}
+  .form-msg{font-size:12px;padding:9px 10px;border-radius:8px;margin-top:10px;display:none}
+  .form-msg.ok{display:block;background:#ffbf691c;color:#ffca80}
+  .form-msg.err{display:block;background:#ff79791c;color:#ff9c9c}
+  .tabs{display:flex;gap:7px;overflow:auto;padding:3px 1px 12px;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:8px 12px;background:#151319;color:var(--muted);font:500 12px Inter,sans-serif;cursor:pointer;transition:.35s ease}
+  .tab.active{border-color:#ff6a3d88;background:#ff6a3d1e;color:#ffd1bf}
+  .feed-empty,.feed-loading{text-align:center;padding:38px 10px;color:var(--muted);font-size:13px}
+  .post{padding:0;overflow:hidden;margin-bottom:14px}
+  .post-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px 0;gap:10px}
+  .post-number{font:600 14px Inter,sans-serif;color:#f6dfd4}
+  .post-time{font-size:11px;color:var(--dim);white-space:nowrap}
+  .tag{font-size:10px;line-height:1;padding:5px 8px;border-radius:999px;color:#d9d0ff;background:#8a7cff1c;border:1px solid #8a7cff42;letter-spacing:.03em}
+  .post-caption{font:400 21px/1.25 'DM Serif Display',Georgia,serif;padding:12px 16px 0;color:#f2eef1}
+  .video-frame{position:relative;margin-top:14px;aspect-ratio:16/9;background:#08080a}
+  .video-frame iframe{height:100%;width:100%;border:0}
+  .story{padding:13px 16px 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.8;color:#dad5d9}
+  .story-image{margin:14px 16px 0;width:calc(100% - 32px);max-height:420px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+  .reactions{display:flex;gap:6px;flex-wrap:wrap;padding:14px 16px}
+  .react{border:1px solid var(--line);border-radius:999px;padding:6px 9px;background:#101015;color:var(--muted);font:500 13px Inter,sans-serif;cursor:pointer;transition:.25s ease}
+  .react:hover,.react.sel{border-color:#ff6a3d88;background:#ff6a3d19;color:#ffe1d6}
+  .react span{font-size:11px;margin-left:3px}
+  #more{display:none;width:100%;border:1px solid var(--line);border-radius:12px;padding:11px;background:#151319;color:var(--muted);font:500 13px Inter,sans-serif;cursor:pointer;transition:.3s}
+  #more:hover{color:var(--text);border-color:#8a7cff88}
+  #more:disabled{opacity:.5;cursor:not-allowed}
+  .dawn-goodbye{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;background:linear-gradient(#563857,#d98a60);color:#fff;font:400 34px/1.35 'DM Serif Display',Georgia,serif;opacity:0;pointer-events:none;transition:opacity 1.5s ease}
+  .dawn-goodbye.show{opacity:1;pointer-events:auto}
+  @media(max-width:520px){.shell{padding:20px 14px 54px}.brand{margin-bottom:20px}.locked{min-height:450px}.post-caption{font-size:20px}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="brand">
+    <div class="brand-mark"><div class="moon" aria-hidden="true"></div><h1>Reyi <span>రేయి</span></h1></div>
+    <div class="hours">11 PM — 5 AM IST</div>
+  </header>
+
+  <section id="lockedView" class="panel locked">
+    <div>
+      <div class="lock-icon" aria-hidden="true">☾</div>
+      <div class="eyebrow">Closed for now</div>
+      <h2>Reyi opens at<br>11:00 PM</h2>
+      <p>Come back when the world gets quieter.</p>
+      <div id="countdown" class="countdown">--:--:--</div>
+      <p class="small-copy">kept for the quiet hours</p>
+    </div>
+  </section>
+
+  <section id="openView" class="hidden">
+    <p class="intro"><b>A night space for feelings that stay with you.</b> Anonymous stories and links are reviewed before they appear.</p>
+    <section class="panel composer">
+      <div class="type-switch">
+        <button class="type-btn active" data-type="video" onclick="chooseType('video')">Share a video</button>
+        <button class="type-btn" data-type="story" onclick="chooseType('story')">Share a story</button>
+      </div>
+      <label for="category">Mood</label>
+      <select id="category">
+        <option>Heartbreak</option><option>Inspiration</option><option>Goosebumps</option><option>Deep Thoughts</option><option>Late Night Vibe</option>
+      </select>
+      <label for="caption">Caption <span>(optional · 150 max)</span></label>
+      <input id="caption" maxlength="150" placeholder="A short thought before the moment…">
+      <div id="videoFields">
+        <label for="videoUrl">YouTube or Instagram Reel link</label>
+        <input id="videoUrl" inputmode="url" placeholder="Paste a YouTube or Instagram link">
+        <p class="field-note">Your link is reviewed by an admin before it appears. Videos play from YouTube or Instagram, not our server.</p>
+      </div>
+      <div id="storyFields" class="hidden">
+        <label for="storyText">Your story <span>(2000 max)</span></label>
+        <textarea id="storyText" maxlength="2000" placeholder="Write the moment you want to leave here…"></textarea>
+        <div class="image-row"><label class="file-label">◫ Add photo <input id="storyImage" type="file" accept=".jpg,.jpeg,.png,.webp" hidden></label><span id="imageName"></span></div>
+      </div>
+      <div class="submit-row"><button id="submit" class="submit" onclick="submitPost()">Send into Reyi</button></div>
+      <div id="formMsg" class="form-msg"></div>
+    </section>
+    <nav id="tabs" class="tabs" aria-label="Reyi categories"></nav>
+    <section id="feed"></section>
+    <button id="more" onclick="loadMore()">Load more moments</button>
+  </section>
+</main>
+<div id="goodbye" class="dawn-goodbye">సూర్యోదయం అవుతోంది...<br>మళ్ళీ రేయి కలుద్దాం</div>
+
+<script>
+  const CATEGORIES=['All','Heartbreak','Inspiration','Goosebumps','Deep Thoughts','Late Night Vibe'];
+  const REACTIONS=[['heartbreak','💔'],['sad','😢'],['love','😍'],['fire','🔥'],['sparkles','✨']];
+  let type='video',selectedCategory='',page=1,hasMore=false,loading=false,isOpen=false,nextOpenAt=null,booted=false;
+
+  const $=id=>document.getElementById(id);
+  const esc=value=>{const d=document.createElement('div');d.textContent=value||'';return d.innerHTML;};
+  const attr=value=>esc(value).replace(/"/g,'&quot;');
+  const relativeTime=value=>{
+    const seconds=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/1000));
+    if(seconds<60)return 'just now';
+    if(seconds<3600)return `${Math.floor(seconds/60)}m ago`;
+    if(seconds<86400)return `${Math.floor(seconds/3600)}h ago`;
+    return `${Math.floor(seconds/86400)}d ago`;
+  };
+
+  function chooseType(next){
+    type=next;
+    document.querySelectorAll('.type-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.type===next));
+    $('videoFields').classList.toggle('hidden',next!=='video');
+    $('storyFields').classList.toggle('hidden',next!=='story');
+  }
+
+  $('storyImage').addEventListener('change',()=>{
+    const file=$('storyImage').files[0];
+    $('imageName').textContent=file?file.name:'';
+  });
+
+  function showMessage(message,ok){
+    const target=$('formMsg');
+    target.className=`form-msg ${ok?'ok':'err'}`;
+    target.textContent=message;
+  }
+
+  function renderTabs(){
+    $('tabs').innerHTML=CATEGORIES.map(category=>{
+      const active=(category==='All'?!selectedCategory:selectedCategory===category);
+      return `<button class="tab ${active?'active':''}" data-category="${attr(category)}" onclick="pickCategory(this.dataset.category)">${esc(category)}</button>`;
+    }).join('');
+  }
+
+  function pickCategory(category){
+    selectedCategory=category==='All'?'':category;
+    page=1;hasMore=false;$('feed').innerHTML='';$('more').style.display='none';
+    renderTabs();loadFeed();
+  }
+
+  function reactionFor(id){return localStorage.getItem(`reyi_reaction_${id}`)||null;}
+  function setReaction(id,value){if(value)localStorage.setItem(`reyi_reaction_${id}`,value);else localStorage.removeItem(`reyi_reaction_${id}`);}
+  function reactionBar(post){
+    const current=reactionFor(post.id);
+    return `<div class="reactions">${REACTIONS.map(([key,emoji])=>
+      `<button class="react ${current===key?'sel':''}" onclick="react(${post.id},'${key}',this.closest('.reactions'))">${emoji}<span>${post['react_'+key]||0}</span></button>`
+    ).join('')}</div>`;
+  }
+
+  async function react(id,tapped,container){
+    const previous=reactionFor(id);
+    const emoji=previous===tapped?null:tapped;
+    const buttons=container.querySelectorAll('.react');
+    REACTIONS.forEach(([key],index)=>{
+      const count=buttons[index].querySelector('span');
+      let value=parseInt(count.textContent,10)||0;
+      if(key===previous&&previous!==emoji)value=Math.max(0,value-1);
+      if(key===emoji)value++;
+      count.textContent=value;
+      buttons[index].classList.toggle('sel',key===emoji);
+    });
+    setReaction(id,emoji);
+    try{
+      const response=await fetch(`/api/reyi/posts/${id}/react`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji,prev:previous})});
+      if(response.status===403)refreshStatus();
+    }catch{}
+  }
+
+  function postCard(post){
+    const caption=post.caption?`<div class="post-caption">${esc(post.caption)}</div>`:'';
+    const media=post.post_type==='video'
+      ?`<div class="video-frame"><iframe src="${attr(post.video_url)}" title="Reyi video #${post.post_number}" loading="lazy" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+      :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="story-image" src="/api/reyi/image/${post.id}" loading="lazy" alt="">`:''}`;
+    return `<article class="panel post">
+      <div class="post-head"><div><span class="post-number">#${post.post_number}</span> <span class="tag">${esc(post.category)}</span></div><time class="post-time">${relativeTime(post.created_at)}</time></div>
+      ${caption}${media}${reactionBar(post)}
+    </article>`;
+  }
+
+  async function loadFeed(){
+    if(loading||!isOpen)return;
+    loading=true;
+    const feed=$('feed'),more=$('more');
+    if(page===1)feed.innerHTML='<div class="feed-loading">Finding tonight’s moments…</div>';
+    else{more.disabled=true;more.textContent='Loading…';}
+    try{
+      const params=new URLSearchParams({page});
+      if(selectedCategory)params.set('category',selectedCategory);
+      const response=await fetch(`/api/reyi/posts?${params}`);
+      const data=await response.json();
+      if(response.status===403){refreshStatus();return;}
+      if(!data.success)throw new Error();
+      if(page===1)feed.innerHTML='';
+      if(!data.posts.length&&page===1){
+        feed.innerHTML='<div class="feed-empty">Nothing here yet tonight.<br>Leave the first quiet moment.</div>';
+      }else{
+        feed.insertAdjacentHTML('beforeend',data.posts.map(postCard).join(''));
+      }
+      hasMore=data.hasMore;
+      more.style.display=hasMore?'block':'none';
+      more.disabled=false;more.textContent='Load more moments';
+    }catch{
+      if(page===1)feed.innerHTML='<div class="feed-empty">Reyi could not load right now.</div>';
+    }finally{loading=false;}
+  }
+
+  function loadMore(){if(!hasMore||loading)return;page++;loadFeed();}
+
+  async function submitPost(){
+    const button=$('submit');
+    const form=new FormData();
+    form.append('post_type',type);
+    form.append('category',$('category').value);
+    form.append('caption',$('caption').value.trim());
+    if(type==='video'){
+      const value=$('videoUrl').value.trim();
+      if(!value){showMessage('Paste a YouTube or Instagram link first.',false);return;}
+      form.append('video_url',value);
+    }else{
+      const story=$('storyText').value.trim();
+      if(!story){showMessage('Write your story first.',false);return;}
+      form.append('story_text',story);
+      const image=$('storyImage').files[0];
+      if(image)form.append('story_image',image);
+    }
+    button.disabled=true;button.textContent='Sending…';
+    try{
+      const response=await fetch('/api/reyi/posts',{method:'POST',body:form});
+      const data=await response.json();
+      if(response.status===403){refreshStatus();return;}
+      showMessage(data.message||(data.success?'Submitted for approval.':'Could not submit.'),data.success);
+      if(data.success){
+        $('caption').value='';$('videoUrl').value='';$('storyText').value='';$('storyImage').value='';$('imageName').textContent='';
+      }
+    }catch{showMessage('Could not reach Reyi. Try again.',false);}
+    finally{button.disabled=false;button.textContent='Send into Reyi';}
+  }
+
+  function updateCountdown(){
+    if(!nextOpenAt)return;
+    const diff=Math.max(0,new Date(nextOpenAt).getTime()-Date.now());
+    const h=String(Math.floor(diff/3600000)).padStart(2,'0');
+    const m=String(Math.floor((diff%3600000)/60000)).padStart(2,'0');
+    const s=String(Math.floor((diff%60000)/1000)).padStart(2,'0');
+    $('countdown').textContent=`${h}:${m}:${s}`;
+  }
+
+  async function refreshStatus(){
+    try{
+      const response=await fetch('/api/reyi/status');
+      const status=await response.json();
+      if(!status.success)return;
+      document.body.classList.toggle('dawn',Boolean(status.dawn));
+      nextOpenAt=status.nextOpenAt;
+      const wasOpen=isOpen;
+      isOpen=status.open;
+      if(status.open){
+        $('lockedView').classList.add('hidden');$('openView').classList.remove('hidden');
+        if(!wasOpen||!booted){page=1;hasMore=false;renderTabs();loadFeed();}
+      }else{
+        const closeAfterGoodbye=wasOpen&&booted;
+        const lock=()=>{$('openView').classList.add('hidden');$('lockedView').classList.remove('hidden');$('feed').innerHTML='';$('more').style.display='none';updateCountdown();};
+        if(closeAfterGoodbye){
+          $('goodbye').classList.add('show');
+          setTimeout(()=>{$('goodbye').classList.remove('show');lock();},4500);
+        }else lock();
+      }
+      booted=true;
+    }catch{}
+  }
+
+  refreshStatus();
+  setInterval(refreshStatus,30000);
+  setInterval(updateCountdown,1000);
+</script>
+</body>
+</html>
