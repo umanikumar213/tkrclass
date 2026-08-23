@@ -162,12 +162,11 @@ async function submitPost(){
 
 function buildDays(){
   const el=document.getElementById('days');
-  const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html=`<button class="day ${selectedDay===null?'active':''}" onclick="pickDay(null)"><b>All</b>posts</button>`;
-  for(let i=0;i<7;i++){
+  for(let i=0;i<2;i++){
     const d=new Date();d.setDate(d.getDate()-i);
     const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const label=i===0?'Today':names[d.getDay()];
+    const label=i===0?'Today':'Yesterday';
     html+=`<button class="day ${selectedDay===iso?'active':''}" onclick="pickDay('${iso}')"><b>${label}</b>${d.getDate()}/${d.getMonth()+1}</button>`;
   }
   el.innerHTML=html;
