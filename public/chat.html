@@ -98,9 +98,11 @@
   .c-msg.ok{background:var(--gold-soft);color:#8a6100;display:block}
   .c-msg.bad{background:var(--red-soft);color:var(--red);display:block}
 
-  /* --- incremental feed loading --- */
-  #feedEnd{height:1px;margin-top:4px}
-  #feedStatus{text-align:center;color:var(--faint);font-size:12px;padding:8px 0;min-height:28px}
+  /* --- load more --- */
+  #loadMoreBtn{display:none;width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;
+    background:#fff;font-family:inherit;font-size:13px;font-weight:500;color:var(--sub);cursor:pointer;margin-top:4px;transition:.15s}
+  #loadMoreBtn:hover{border-color:var(--maroon);color:var(--maroon)}
+  #loadMoreBtn:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -125,14 +127,12 @@
 
   <div class="days" id="days"></div>
   <div id="feed"></div>
-  <div id="feedEnd" aria-hidden="true"></div>
-  <div id="feedStatus" aria-live="polite"></div>
+  <button id="loadMoreBtn" onclick="loadMore()">Load more posts</button>
 </div>
 
 <script>
 const txt=document.getElementById('text'),cnt=document.getElementById('cnt'),imgIn=document.getElementById('img');
 let selectedDay=null, currentPage=1, hasMore=false, loading=false;
-const feedEnd=document.getElementById('feedEnd'),feedStatus=document.getElementById('feedStatus');
 
 txt.addEventListener('input',()=>cnt.textContent=txt.value.length);
 imgIn.addEventListener('change',()=>{
@@ -174,7 +174,7 @@ function buildDays(){
 }
 function pickDay(d){selectedDay=d;buildDays();resetFeed();loadFeed();}
 
-function resetFeed(){currentPage=1;hasMore=false;document.getElementById('feed').innerHTML='';feedStatus.textContent='';}
+function resetFeed(){currentPage=1;hasMore=false;document.getElementById('feed').innerHTML='';document.getElementById('loadMoreBtn').style.display='none';}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
@@ -269,8 +269,9 @@ async function loadFeed(){
   if(loading)return;
   loading=true;
   const feed=document.getElementById('feed');
+  const loadMoreBtn=document.getElementById('loadMoreBtn');
   if(currentPage===1)feed.innerHTML='<div class="empty">Loading…</div>';
-  else feedStatus.textContent='Loading more posts…';
+  else{loadMoreBtn.disabled=true;loadMoreBtn.textContent='Loading…';}
   try{
     let url='/api/chat/posts?page='+currentPage;
     if(selectedDay)url+='&day='+selectedDay;
@@ -282,7 +283,7 @@ async function loadFeed(){
     }
     if(currentPage===1&&!d.posts.length){
       feed.innerHTML='<div class="empty">No confessions '+(selectedDay?'on this day':'yet')+'. Be the first 👀</div>';
-      feedStatus.textContent='';loading=false;return;
+      loadMoreBtn.style.display='none';loading=false;return;
     }
     if(currentPage===1)feed.innerHTML='';
     const n=d.posts.length;
@@ -306,10 +307,11 @@ async function loadFeed(){
       feed.insertAdjacentHTML('beforeend',html);
     }
     hasMore=d.hasMore;
-    feedStatus.textContent=hasMore?'':'You’ve reached the end.';
+    loadMoreBtn.style.display=hasMore?'block':'none';
+    loadMoreBtn.disabled=false;
+    loadMoreBtn.textContent='Load more posts';
   }catch(e){
     if(currentPage===1)feed.innerHTML='<div class="empty">Cannot reach server.</div>';
-    feedStatus.textContent='';
   }
   loading=false;
 }
@@ -319,12 +321,6 @@ async function loadMore(){
   currentPage++;
   await loadFeed();
 }
-
-// Fetch the next batch automatically as the user approaches the bottom.
-const feedObserver=new IntersectionObserver(entries=>{
-  if(entries[0].isIntersecting&&hasMore&&!loading)loadMore();
-},{rootMargin:'500px 0px'});
-feedObserver.observe(feedEnd);
 
 async function report(id,btn){
   if(!confirm('Report this post to the admin?'))return;
