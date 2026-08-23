@@ -318,6 +318,7 @@ async function initReyiDb() {
       post_number        INTEGER UNIQUE,
       post_type          TEXT NOT NULL CHECK (post_type IN ('video', 'story')),
       telegram_file_id   TEXT,
+      legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE,
       story_text         VARCHAR(2000),
       story_image_data   BYTEA,
       story_image_type   TEXT,
@@ -365,7 +366,11 @@ async function initReyiDb() {
       ADD COLUMN IF NOT EXISTS react_goosebumps INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS react_hug INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS react_healing INTEGER NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS telegram_file_id TEXT;
+      ADD COLUMN IF NOT EXISTS telegram_file_id TEXT,
+      ADD COLUMN IF NOT EXISTS legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE;
+    UPDATE reyi_posts
+    SET legacy_video_archived = TRUE
+    WHERE post_type = 'video' AND telegram_file_id IS NULL;
     UPDATE reyi_posts
     SET category = CASE category
       WHEN 'Heartbreak' THEN 'Heartache'
@@ -471,13 +476,13 @@ router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
 
     const offset = (page - 1) * REYI_PAGE_SIZE;
     const values = [];
-    let where = `status = 'approved' AND (post_type = 'story' OR telegram_file_id IS NOT NULL)`;
+    let where = `status = 'approved'`;
     if (category) {
       values.push(category);
       where += ` AND category = $1`;
     }
     const { rows } = await pool.query(
-      `SELECT id, post_number, post_type, telegram_file_id, story_text,
+      `SELECT id, post_number, post_type, telegram_file_id, legacy_video_archived, story_text,
                (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at,
                react_heartache, react_pleading, react_goosebumps, react_hug, react_healing,
                (SELECT COUNT(*) FROM reyi_comments rc
@@ -685,7 +690,7 @@ router.post('/api/reyi/admin/logout', (req, res) => {
 router.get('/api/reyi/admin/queue', requireAdmin, async (req, res) => {
   try {
     const { rows: posts } = await pool.query(
-      `SELECT id, post_type, telegram_file_id, story_text,
+      `SELECT id, post_type, telegram_file_id, legacy_video_archived, story_text,
               (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at
        FROM reyi_posts WHERE status = 'pending' ORDER BY created_at ASC`
     );
@@ -709,14 +714,10 @@ router.post('/api/reyi/admin/approve/:id', requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await client.query('BEGIN');
-    const post = await client.query(`SELECT status, post_type, telegram_file_id FROM reyi_posts WHERE id = $1 FOR UPDATE`, [id]);
+    const post = await client.query(`SELECT status FROM reyi_posts WHERE id = $1 FOR UPDATE`, [id]);
     if (!post.rows.length || post.rows[0].status !== 'pending') {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Post is not pending.' });
-    }
-    if (post.rows[0].post_type === 'video' && !post.rows[0].telegram_file_id) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: 'Legacy link submissions cannot be approved.' });
     }
     const counter = await client.query(
       `UPDATE reyi_counter SET value = value + 1 WHERE name = 'post_number' RETURNING value`

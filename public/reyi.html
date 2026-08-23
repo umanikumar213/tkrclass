@@ -67,6 +67,7 @@
   .post-caption{font:400 21px/1.25 'DM Serif Display',Georgia,serif;padding:12px 16px 0;color:#f2eef1}
   .video-frame{position:relative;margin-top:14px;aspect-ratio:16/9;background:#08080a}
    .video-frame video{height:100%;width:100%;display:block;object-fit:contain}
+   .video-archived{display:flex;align-items:center;justify-content:center;min-height:130px;margin-top:14px;padding:24px;background:#0d0c10;color:var(--dim);font-size:12px;text-align:center;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
    .w-full{width:100%}.rounded-xl{border-radius:12px}.bg-black{background:#000}
   .story{padding:13px 16px 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.8;color:#dad5d9}
   .story-image{margin:14px 16px 0;width:calc(100% - 32px);max-height:420px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
@@ -284,7 +285,9 @@
   function postCard(post){
     const caption=post.caption?`<div class="post-caption">${esc(post.caption)}</div>`:'';
     const media=post.post_type==='video'
-       ?`<div class="video-frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
+       ?(post.telegram_file_id
+         ?`<div class="video-frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
+         :'<div class="video-archived">Archived video · no longer available</div>')
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="story-image" src="/api/reyi/image/${post.id}" loading="lazy" alt="">`:''}`;
     const count=Number(post.comment_count)||0;
     const commentLabel=`💬 ${count} ${count===1?'comment':'comments'}`;
