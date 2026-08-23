@@ -319,6 +319,7 @@ async function initReyiDb() {
       post_type          TEXT NOT NULL CHECK (post_type IN ('video', 'story')),
       telegram_file_id   TEXT,
       legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE,
+      reported           BOOLEAN NOT NULL DEFAULT FALSE,
       story_text         VARCHAR(2000),
       story_image_data   BYTEA,
       story_image_type   TEXT,
@@ -367,7 +368,8 @@ async function initReyiDb() {
       ADD COLUMN IF NOT EXISTS react_hug INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS react_healing INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS telegram_file_id TEXT,
-      ADD COLUMN IF NOT EXISTS legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE;
+      ADD COLUMN IF NOT EXISTS legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS reported BOOLEAN NOT NULL DEFAULT FALSE;
     UPDATE reyi_posts
     SET legacy_video_archived = TRUE
     WHERE post_type = 'video' AND telegram_file_id IS NULL;
@@ -504,6 +506,23 @@ router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
   } catch (error) {
     console.error('[reyi] feed error:', error.message);
     res.status(500).json({ success: false, message: 'Could not load Reyi posts.' });
+  }
+});
+
+router.post('/api/reyi/posts/:id/report', requireReyiOpen, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const result = await pool.query(
+      `UPDATE reyi_posts SET reported = TRUE
+       WHERE id = $1 AND status = 'approved'
+       RETURNING id`,
+      [id]
+    );
+    if (!result.rows.length) return res.status(404).json({ success: false, message: 'Post not found.' });
+    res.json({ success: true, message: 'Reported. An admin will review this post.' });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not report this post.' });
   }
 });
 
@@ -691,8 +710,8 @@ router.get('/api/reyi/admin/queue', requireAdmin, async (req, res) => {
   try {
     const { rows: posts } = await pool.query(
       `SELECT id, post_type, telegram_file_id, legacy_video_archived, story_text,
-              (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at
-       FROM reyi_posts WHERE status = 'pending' ORDER BY created_at ASC`
+              (story_image_data IS NOT NULL) AS has_story_image, category, caption, reported, status, created_at
+       FROM reyi_posts WHERE status = 'pending' OR reported = TRUE ORDER BY created_at ASC`
     );
     const { rows: comments } = await pool.query(
       `SELECT rc.id, rc.text, rc.created_at, rp.post_number, rp.post_type,
@@ -745,10 +764,38 @@ router.post('/api/reyi/admin/reject/:id', requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const result = await pool.query(
+      `DELETE FROM reyi_posts
+       WHERE id = $1 AND reported = TRUE
+       RETURNING id`,
+      [id]
+    );
+    if (result.rows.length) {
+      invalidateFeedCache();
+      return res.json({ success: true });
+    }
     await pool.query(`UPDATE reyi_posts SET status = 'rejected' WHERE id = $1 AND status = 'pending'`, [id]);
     res.json({ success: true });
   } catch {
-    res.status(500).json({ success: false, message: 'Could not reject post.' });
+    res.status(500).json({ success: false, message: 'Could not remove post.' });
+  }
+});
+
+router.post('/api/reyi/admin/unflag/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const result = await pool.query(
+      `UPDATE reyi_posts SET reported = FALSE
+       WHERE id = $1 AND status = 'approved' AND reported = TRUE
+       RETURNING id`,
+      [id]
+    );
+    if (!result.rows.length) return res.status(400).json({ success: false, message: 'Report is no longer active.' });
+    invalidateFeedCache();
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not keep post.' });
   }
 });
 

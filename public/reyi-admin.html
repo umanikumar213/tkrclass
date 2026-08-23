@@ -40,7 +40,8 @@
   .action{flex:1;border:0;border-radius:9px;padding:10px;font:600 12px Inter,sans-serif;cursor:pointer;color:white}
   .approve{background:#237c50}.reject{background:#a53e4b}
   .empty{text-align:center;padding:42px 12px;color:var(--muted);font-size:13px}
-   .comment-tag{display:inline-block;border:1px solid #8a7cff55;background:#8a7cff1d;color:#dbd4ff;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+    .comment-tag{display:inline-block;border:1px solid #8a7cff55;background:#8a7cff1d;color:#dbd4ff;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+    .report-tag{display:inline-block;border:1px solid #ff797955;background:#ff79791c;color:#ff9c9c;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin:0 0 10px 5px}
    .context{border-left:2px solid #514764;color:var(--muted);font-size:12px;line-height:1.5;padding-left:9px;margin:3px 0 10px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
@@ -95,19 +96,24 @@
 
   function postMarkup(post){
     const caption=post.caption?`<div class="caption">${esc(post.caption)}</div>`:'';
+     const isReported=post.status==='approved'&&post.reported;
     const content=post.post_type==='video'
        ?(post.telegram_file_id
          ?`<div class="frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
          :'<div class="video-archived">Archived link-based video · approve to preserve the post without external playback</div>')
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="image protected-image" data-src="/api/reyi/image/${post.id}" alt="Story attachment">`:''}`;
     return `<article class="card">
-      <span class="type ${post.post_type}">${post.post_type}</span>
+       <span class="type ${post.post_type}">${post.post_type}</span>
+       ${isReported?`<span class="report-tag">⚑ Reported</span>`:''}
       <span class="meta">${formatDate(post.created_at)}</span>
       <span class="category">${esc(post.category)}</span>
       ${caption}${content}
       <div class="actions">
-         <button class="action approve" onclick="moderate('approve',${post.id})">Approve</button>
-        <button class="action reject" onclick="moderate('reject',${post.id})">Reject</button>
+         ${isReported
+           ?`<button class="action approve" onclick="moderate('unflag',${post.id})">Keep post</button>
+             <button class="action reject" onclick="moderate('reject',${post.id},true,true)">Delete post</button>`
+           :`<button class="action approve" onclick="moderate('approve',${post.id})">Approve</button>
+             <button class="action reject" onclick="moderate('reject',${post.id},true,false)">Reject</button>`}
       </div>
     </article>`;
   }
@@ -149,8 +155,8 @@
     }catch{queue.innerHTML='<div class="empty">Could not load the queue.</div>';}
   }
 
-  async function moderate(action,id){
-    if(action==='reject'&&!confirm('Reject this submission? It will remain hidden.'))return;
+   async function moderate(action,id,confirmIt,deleteIt){
+     if(confirmIt&&!confirm(deleteIt?'Delete this reported post permanently? This cannot be undone.':'Reject this submission? It will remain hidden.'))return;
     try{
       const response=await fetch(`/api/reyi/admin/${action}/${id}`,{method:'POST',headers:headers()});
       if(response.status===401){logout();return;}

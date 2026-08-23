@@ -77,8 +77,11 @@
   .react span{font-size:11px;margin-left:3px}
    .post-actions{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line)}
    .post-actions .reactions{padding:12px 16px}
+   .post-tools{display:flex;align-items:center;gap:2px}
    .comment-toggle{border:0;background:transparent;color:var(--muted);font:500 12px Inter,sans-serif;cursor:pointer;padding:10px 16px;white-space:nowrap}
    .comment-toggle:hover{color:var(--text)}
+   .report{border:0;background:transparent;color:var(--dim);font:500 11px Inter,sans-serif;cursor:pointer;padding:10px 12px;white-space:nowrap}
+   .report:hover{color:var(--danger)}.report:disabled{cursor:default;color:var(--gold)}
    .comments{border-top:1px solid var(--line);padding:12px 16px 14px;background:#100f13}
    .comment-list{margin-bottom:10px}
    .comment-item{padding:8px 0;border-bottom:1px solid #28242c}
@@ -280,6 +283,17 @@
     }finally{
       button.disabled=false;button.textContent='Send';
     }
+
+   async function report(id,button){
+     if(!confirm('Report this post to the admin?'))return;
+     try{
+       const response=await fetch(`/api/reyi/posts/${id}/report`,{method:'POST'});
+       const data=await response.json();
+       if(response.status===403){refreshStatus();return;}
+       button.textContent=data.success?'⚑ Reported ✓':'⚑ Report';
+       button.disabled=Boolean(data.success);
+     }catch{}
+   }
   }
 
   function postCard(post){
@@ -293,7 +307,7 @@
     const commentLabel=`💬 ${count} ${count===1?'comment':'comments'}`;
     return `<article class="panel post">
       <div class="post-head"><div><span class="post-number">#${post.post_number}</span> <span class="tag">${esc(moodLabel(post.category))}</span></div><time class="post-time">${relativeTime(post.created_at)}</time></div>
-      ${caption}${media}<div class="post-actions">${reactionBar(post)}<button class="comment-toggle" data-label="${commentLabel}" onclick="toggleComments(${post.id},this)">${commentLabel}</button></div>
+       ${caption}${media}<div class="post-actions">${reactionBar(post)}<div class="post-tools"><button class="comment-toggle" data-label="${commentLabel}" onclick="toggleComments(${post.id},this)">${commentLabel}</button><button class="report" onclick="report(${post.id},this)">⚑ Report</button></div></div>
       <section id="comments-${post.id}" class="comments" style="display:none"></section>
     </article>`;
   }
