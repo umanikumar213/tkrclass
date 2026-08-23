@@ -68,7 +68,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS confessions (
       id          SERIAL PRIMARY KEY,
       post_number INTEGER UNIQUE,
-      text        VARCHAR(500) NOT NULL,
+      text        VARCHAR(2500) NOT NULL,
       image_data  BYTEA,
       image_type  TEXT,
       video_file_id TEXT,
@@ -96,6 +96,7 @@ async function initDb() {
   `);
   await pool.query(`
     ALTER TABLE confessions
+      ALTER COLUMN text TYPE VARCHAR(2500),
       ADD COLUMN IF NOT EXISTS video_file_id TEXT,
       ADD COLUMN IF NOT EXISTS mood TEXT NOT NULL DEFAULT 'Other / Casual';
     CREATE INDEX IF NOT EXISTS idx_confessions_mood_approved
@@ -380,7 +381,7 @@ router.post('/api/chat/posts', (req, res) => {
       }
       const text = (req.body.text || '').trim();
       if (!text) return res.status(400).json({ success: false, message: 'Confession text is required.' });
-      if (text.length > 500) return res.status(400).json({ success: false, message: 'Max 500 characters.' });
+      if (text.length > 2500) return res.status(400).json({ success: false, message: 'Max 2500 characters.' });
       const mood = String(req.body.mood || '');
       if (!CHAT_MOODS.has(mood)) return res.status(400).json({ success: false, message: 'Choose a valid mood.' });
 
