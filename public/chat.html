@@ -34,7 +34,7 @@
     border-radius:8px;font-size:12px;color:var(--sub);cursor:pointer;background:#fffdf8;white-space:nowrap}
   .filebtn:hover{border-color:var(--gold);color:var(--maroon)}
   #fileName{font-size:12px;color:var(--sub);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #clearImg{display:none;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0}
+  #clearMedia{display:none;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0}
   .btn{flex:1;min-width:120px;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;
     font-weight:600;font-size:13px;color:#fff;background:var(--maroon);transition:.15s;white-space:nowrap}
   .btn:hover{background:var(--maroon-dark)} .btn:disabled{opacity:.55;cursor:not-allowed}
@@ -42,14 +42,14 @@
   .msg.ok{background:var(--gold-soft);color:#8a6100;display:block}
   .msg.bad{background:var(--red-soft);color:var(--red);display:block}
 
-  /* --- day filter --- */
-  .days{display:flex;gap:6px;overflow-x:auto;padding:2px;margin-bottom:14px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-  .days::-webkit-scrollbar{display:none}
-  .day{flex-shrink:0;padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;
+  .mood-select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:13px;outline:none}
+  .mood-select:focus{border-color:var(--maroon);box-shadow:0 0 0 3px #7b180014}
+  /* --- mood filter --- */
+  .moods{display:flex;gap:6px;overflow-x:auto;padding:2px;margin-bottom:14px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .moods::-webkit-scrollbar{display:none}
+  .mood{flex-shrink:0;padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;
     font-family:inherit;font-size:11px;font-weight:500;color:var(--sub);text-align:center;line-height:1.3;transition:.15s}
-  .day b{display:block;font-size:12px;color:var(--ink)}
-  .day.active{background:var(--maroon);border-color:var(--maroon)}
-  .day.active b,.day.active{color:#fff}
+  .mood.active{background:var(--maroon);border-color:var(--maroon);color:#fff}
 
   /* --- posts --- */
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
@@ -60,6 +60,8 @@
   .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
   .pimg{margin-top:10px;border-radius:10px;max-width:100%;display:block;border:1px solid var(--line);opacity:0;transition:opacity .35s ease}
   .pimg.loaded{opacity:1}
+  .pvideo{width:100%;max-height:420px;margin-top:10px;display:block;border:1px solid var(--line);border-radius:10px;background:#111}
+  .mood-tag{display:inline-flex;align-items:center;margin-left:7px;padding:3px 7px;border-radius:999px;background:var(--gold-soft);color:#8a6100;font-size:10px;font-weight:600}
   .pfoot{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
   .report{background:none;border:none;font-family:inherit;font-size:11px;color:var(--faint);cursor:pointer}
   .report:hover{color:var(--red)}
@@ -116,62 +118,78 @@
   <div class="compose">
     <textarea id="text" maxlength="500" placeholder="Your confession or opinion… (max 500 characters)"></textarea>
     <div class="compose-row">
+      <select class="mood-select" id="mood" aria-label="Mood">
+        <option value="Heartache">💔 Heartache</option>
+        <option value="Nostalgia">🌧️ Nostalgia</option>
+        <option value="Goosebumps">⚡ Goosebumps</option>
+        <option value="Midnight Thoughts">🌙 Midnight Thoughts</option>
+        <option value="Alone">🌌 Alone</option>
+        <option value="Other / Casual" selected>✨ Other / Casual</option>
+      </select>
+    </div>
+    <div class="compose-row">
       <label class="filebtn">📷 Image<input type="file" id="img" accept=".jpg,.jpeg,.png,.webp" hidden></label>
+      <label class="filebtn">🎬 Video<input type="file" id="video" accept=".mp4,video/mp4" hidden></label>
       <span id="fileName"></span>
-      <button id="clearImg" onclick="clearImage()">✕</button>
+      <button id="clearMedia" onclick="clearMedia()">✕</button>
       <span class="cnt"><span id="cnt">0</span>/500</span>
       <button class="btn" id="submitBtn" onclick="submitPost()">Submit anonymously</button>
     </div>
     <div class="msg" id="msg"></div>
   </div>
 
-  <div class="days" id="days"></div>
+  <div class="moods" id="moods" aria-label="Filter by mood"></div>
   <div id="feed"></div>
   <button id="loadMoreBtn" onclick="loadMore()">Load more posts</button>
 </div>
 
 <script>
-const txt=document.getElementById('text'),cnt=document.getElementById('cnt'),imgIn=document.getElementById('img');
-let selectedDay=null, currentPage=1, hasMore=false, loading=false;
+const txt=document.getElementById('text'),cnt=document.getElementById('cnt'),imgIn=document.getElementById('img'),videoIn=document.getElementById('video');
+const MOODS=[['Heartache','💔 Heartache'],['Nostalgia','🌧️ Nostalgia'],['Goosebumps','⚡ Goosebumps'],['Midnight Thoughts','🌙 Midnight Thoughts'],['Alone','🌌 Alone'],['Other / Casual','✨ Other / Casual']];
+let selectedMood='', currentPage=1, hasMore=false, loading=false;
 
 txt.addEventListener('input',()=>cnt.textContent=txt.value.length);
 imgIn.addEventListener('change',()=>{
   const f=imgIn.files[0];
   document.getElementById('fileName').textContent=f?f.name:'';
-  document.getElementById('clearImg').style.display=f?'inline':'none';
+  if(f)videoIn.value='';
+  document.getElementById('clearMedia').style.display=f?'inline':'none';
 });
-function clearImage(){imgIn.value='';document.getElementById('fileName').textContent='';document.getElementById('clearImg').style.display='none';}
+videoIn.addEventListener('change',()=>{
+  const f=videoIn.files[0];
+  document.getElementById('fileName').textContent=f?f.name:'';
+  if(f)imgIn.value='';
+  document.getElementById('clearMedia').style.display=f?'inline':'none';
+});
+function clearMedia(){imgIn.value='';videoIn.value='';document.getElementById('fileName').textContent='';document.getElementById('clearMedia').style.display='none';}
 function showMsg(t,ok){const m=document.getElementById('msg');m.className='msg '+(ok?'ok':'bad');m.textContent=t;}
 
 async function submitPost(){
   const btn=document.getElementById('submitBtn');
   const text=txt.value.trim();
   if(!text){showMsg('Please write something first.',false);return;}
-  const f=imgIn.files[0];
-  if(f&&f.size>5*1024*1024){showMsg('Image must be under 5MB.',false);return;}
+  const image=imgIn.files[0],video=videoIn.files[0];
+  if(image&&image.size>5*1024*1024){showMsg('Image must be under 5MB.',false);return;}
+  if(video&&(video.type!=='video/mp4'||video.size>20*1024*1024)){showMsg('Video must be an MP4 under 20MB.',false);return;}
   btn.disabled=true;btn.textContent='Submitting…';
   try{
-    const fd=new FormData();fd.append('text',text);if(f)fd.append('image',f);
+    const fd=new FormData();fd.append('text',text);fd.append('mood',document.getElementById('mood').value);
+    if(image)fd.append('image',image);if(video)fd.append('video',video);
     const r=await fetch('/api/chat/posts',{method:'POST',body:fd});
     const d=await r.json();
     showMsg(d.message||(d.success?'Submitted!':'Something went wrong.'),d.success);
-    if(d.success){txt.value='';cnt.textContent='0';clearImage();}
+    if(d.success){txt.value='';cnt.textContent='0';clearMedia();}
   }catch(e){showMsg('Cannot reach server. Try again.',false);}
   btn.disabled=false;btn.textContent='Submit anonymously';
 }
 
-function buildDays(){
-  const el=document.getElementById('days');
-  let html=`<button class="day ${selectedDay===null?'active':''}" onclick="pickDay(null)"><b>All</b>posts</button>`;
-  for(let i=0;i<2;i++){
-    const d=new Date();d.setDate(d.getDate()-i);
-    const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const label=i===0?'Today':'Yesterday';
-    html+=`<button class="day ${selectedDay===iso?'active':''}" onclick="pickDay('${iso}')"><b>${label}</b>${d.getDate()}/${d.getMonth()+1}</button>`;
-  }
-  el.innerHTML=html;
+function buildMoods(){
+  const el=document.getElementById('moods');
+  el.innerHTML=[['','All'],...MOODS].map(([value,label])=>
+    `<button class="mood ${selectedMood===value?'active':''}" data-mood="${esc(value)}" onclick="pickMood(this.dataset.mood)">${label}</button>`
+  ).join('');
 }
-function pickDay(d){selectedDay=d;buildDays();resetFeed();loadFeed();}
+function pickMood(value){selectedMood=value;buildMoods();resetFeed();loadFeed();}
 
 function resetFeed(){currentPage=1;hasMore=false;document.getElementById('feed').innerHTML='';document.getElementById('loadMoreBtn').style.display='none';}
 
@@ -273,7 +291,7 @@ async function loadFeed(){
   else{loadMoreBtn.disabled=true;loadMoreBtn.textContent='Loading…';}
   try{
     let url='/api/chat/posts?page='+currentPage;
-    if(selectedDay)url+='&day='+selectedDay;
+    if(selectedMood)url+='&mood='+encodeURIComponent(selectedMood);
     const r=await fetch(url);
     const d=await r.json();
     if(!d.success){
@@ -281,7 +299,7 @@ async function loadFeed(){
       loading=false;return;
     }
     if(currentPage===1&&!d.posts.length){
-      feed.innerHTML='<div class="empty">No confessions '+(selectedDay?'on this day':'yet')+'. Be the first 👀</div>';
+      feed.innerHTML='<div class="empty">No confessions '+(selectedMood?'with this mood':'yet')+'. Be the first 👀</div>';
       loadMoreBtn.style.display='none';loading=false;return;
     }
     if(currentPage===1)feed.innerHTML='';
@@ -292,9 +310,10 @@ async function loadFeed(){
       const label=`💬 ${cc} ${cc===1?'reply':'replies'}`;
       const html=`<div class="card" id="pc-${p.id}">
         <div class="post-inner">
-          <div class="top"><span class="pnum">#${p.post_number}</span><span class="pdate">${fmtDate(p.created_at)}</span></div>
+          <div class="top"><span><span class="pnum">#${p.post_number}</span><span class="mood-tag">${esc(p.mood||'Other / Casual')}</span></span><span class="pdate">${fmtDate(p.created_at)}</span></div>
           <div class="ptext">${esc(p.text)}</div>
           ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="" onload="this.classList.add('loaded')">`:''}
+          ${p.has_video?`<video class="pvideo" controls playsinline preload="metadata" src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}"></video>`:''}
           ${reactRow(p)}
           <div class="pfoot">
             <button class="ccount" data-label="${label}" onclick="toggleComments(${p.id},this)">${label}</button>
@@ -329,7 +348,7 @@ async function report(id,btn){
     btn.textContent=d.success?'Reported ✓':'⚑ Report';btn.disabled=d.success;
   }catch(e){}
 }
-buildDays();loadFeed();
+buildMoods();loadFeed();
 </script>
 </body>
 </html>

@@ -26,7 +26,9 @@
   .tag.comment{background:var(--blue-soft);color:var(--blue)}
   .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
   .pimg{margin-top:10px;border-radius:10px;max-width:100%;border:1px solid var(--line)}
+   .pvideo{width:100%;max-height:360px;display:block;margin-top:10px;border:1px solid var(--line);border-radius:10px;background:#111}
   .pdate{font-size:11px;color:var(--faint);margin-top:6px}
+   .mood{display:inline-block;margin-top:8px;padding:3px 7px;border-radius:99px;background:var(--amber-soft);color:#8a6100;font-size:11px;font-weight:600}
   .row{display:flex;gap:8px;margin-top:12px}
   .act{flex:1;padding:10px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;color:#fff}
   .approve{background:var(--green)} .reject{background:var(--red)} .keep{background:var(--sub)}
@@ -108,7 +110,9 @@ async function loadQueue(){
         return `<div class="card">
           <span class="tag ${isReported?'reported':'pending'}">${isReported?'⚑ Reported · #'+p.post_number:'Pending approval'}</span>
           <div class="ptext">${esc(p.text)}</div>
+          <span class="mood">${esc(p.mood||'Other / Casual')}</span>
           ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" onerror="this.remove()">`:''}
+          ${p.has_video?`<video class="pvideo" controls playsinline preload="metadata" src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}" onerror="this.remove()"></video>`:''}
           <div class="pdate">${fmtDate(p.created_at)}</div>
           <div class="row">
             ${isReported
@@ -142,11 +146,15 @@ async function loadQueue(){
       try{const r=await fetch(img.getAttribute('src'),{headers:hdr()});
         if(r.ok){img.src=URL.createObjectURL(await r.blob());}else{img.remove();}}catch(e){img.remove();}
     });
+    document.querySelectorAll('.pvideo').forEach(async video=>{
+      try{const r=await fetch(video.getAttribute('src'),{headers:hdr()});
+        if(r.ok){video.src=URL.createObjectURL(await r.blob());}else{video.remove();}}catch(e){video.remove();}
+    });
   }catch(e){q.innerHTML='<div class="empty">Could not load queue.</div>';}
 }
 
 async function act(kind,id,confirmIt){
-  if(confirmIt&&!confirm('Permanently delete this post and its image? This cannot be undone.'))return;
+  if(confirmIt&&!confirm('Permanently delete this post and its media? This cannot be undone.'))return;
   try{
     const r=await fetch('/api/chat/admin/'+kind+'/'+id,{method:'POST',headers:hdr()});
     if(r.status===401){logout();return;}

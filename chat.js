@@ -3,6 +3,42 @@ const multer = require('multer');
 const sharp = require('sharp');
 const { Pool } = require('pg');
 const path = require('path');
+const crypto = require('crypto');
+const axios = require('axios');
+const FormData = require('form-data');
+const fs = require('fs');
+const os = require('os');
+
+const CHAT_MOODS = new Set([
+  'Heartache',
+  'Nostalgia',
+  'Goosebumps',
+  'Midnight Thoughts',
+  'Alone',
+  'Other / Casual',
+]);
+const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const TEMP_UPLOAD_DIR = path.join(os.tmpdir(), 'chat-uploads');
+const TELEGRAM_FILE_PATH_CACHE_MS = 60 * 60 * 1000;
+const STALE_UPLOAD_MS = 60 * 60 * 1000;
+const telegramFilePathCache = new Map();
+
+fs.mkdirSync(TEMP_UPLOAD_DIR, { recursive: true, mode: 0o700 });
+
+async function sweepStaleUploads() {
+  const entries = await fs.promises.readdir(TEMP_UPLOAD_DIR, { withFileTypes: true });
+  const cutoff = Date.now() - STALE_UPLOAD_MS;
+  await Promise.all(entries.filter(entry => entry.isFile()).map(async entry => {
+    const filePath = path.join(TEMP_UPLOAD_DIR, entry.name);
+    const stat = await fs.promises.stat(filePath).catch(() => null);
+    if (stat && stat.mtimeMs < cutoff) await fs.promises.unlink(filePath).catch(() => {});
+  }));
+}
+sweepStaleUploads().catch(error => console.error('[chat] stale upload cleanup error:', error.message));
+setInterval(() => {
+  sweepStaleUploads().catch(error => console.error('[chat] stale upload cleanup error:', error.message));
+}, 30 * 60 * 1000).unref();
 
 // --- feed cache (5-minute TTL, invalidated immediately on admin actions) ---
 const FEED_CACHE_TTL = 300_000; // 300 seconds in ms
@@ -35,6 +71,8 @@ async function initDb() {
       text        VARCHAR(500) NOT NULL,
       image_data  BYTEA,
       image_type  TEXT,
+      video_file_id TEXT,
+      mood        TEXT NOT NULL DEFAULT 'Other / Casual',
       status      TEXT NOT NULL DEFAULT 'pending',
       reported    BOOLEAN NOT NULL DEFAULT FALSE,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -56,6 +94,13 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS react_fire  INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS react_up    INTEGER NOT NULL DEFAULT 0;
   `);
+  await pool.query(`
+    ALTER TABLE confessions
+      ADD COLUMN IF NOT EXISTS video_file_id TEXT,
+      ADD COLUMN IF NOT EXISTS mood TEXT NOT NULL DEFAULT 'Other / Casual';
+    CREATE INDEX IF NOT EXISTS idx_confessions_mood_approved
+      ON confessions (mood, post_number DESC) WHERE status = 'approved';
+  `);
   // Comments table – cascades with the parent post
   await pool.query(`
     CREATE TABLE IF NOT EXISTS confession_comments (
@@ -72,13 +117,174 @@ async function initDb() {
 const router = express.Router();
 
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    destination: TEMP_UPLOAD_DIR,
+    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname || '').toLowerCase()}`),
+  }),
+  limits: { fileSize: VIDEO_MAX_BYTES },
   fileFilter: (req, file, cb) => {
-    const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
-    cb(ok ? null : new Error('Only jpg, png and webp images are allowed'), ok);
+    const validImage = file.fieldname === 'image' && ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
+    const validVideo = file.fieldname === 'video' && file.mimetype === 'video/mp4';
+    cb(validImage || validVideo ? null : new Error('Use a JPG, PNG, WebP, or MP4 file.'), validImage || validVideo);
   }
 });
+
+function uploadedFiles(req) {
+  return Object.values(req.files || {}).flat();
+}
+
+async function removeTemporaryUploads(req) {
+  await Promise.all(uploadedFiles(req).map(file => fs.promises.unlink(file.path).catch(() => {})));
+}
+
+async function compressImage(file) {
+  if (!file) return { data: null, type: null };
+  const input = await fs.promises.readFile(file.path);
+  const resize = { width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true };
+  if (file.mimetype === 'image/png') {
+    return { data: await sharp(input).rotate().resize(resize).png({ quality: 75, compressionLevel: 8 }).toBuffer(), type: 'image/png' };
+  }
+  if (file.mimetype === 'image/webp') {
+    return { data: await sharp(input).rotate().resize(resize).webp({ quality: 75 }).toBuffer(), type: 'image/webp' };
+  }
+  return { data: await sharp(input).rotate().resize(resize).jpeg({ quality: 75, mozjpeg: true }).toBuffer(), type: 'image/jpeg' };
+}
+
+async function readMp4Box(handle, offset, end) {
+  if (offset + 8 > end) return null;
+  const header = Buffer.alloc(16);
+  const { bytesRead } = await handle.read(header, 0, 16, offset);
+  if (bytesRead < 8) return null;
+  let size = header.readUInt32BE(0);
+  const type = header.subarray(4, 8).toString('ascii');
+  let headerSize = 8;
+  if (size === 1) {
+    if (bytesRead < 16) return null;
+    const extended = header.readBigUInt64BE(8);
+    if (extended > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    size = Number(extended);
+    headerSize = 16;
+  } else if (size === 0) {
+    size = end - offset;
+  }
+  if (size < headerSize || offset + size > end) return null;
+  return { type, offset, size, headerSize, contentStart: offset + headerSize, end: offset + size };
+}
+
+async function mp4TrackIsVideo(handle, track, boxBudget) {
+  let trackOffset = track.contentStart;
+  while (trackOffset < track.end && boxBudget.count++ < 10_000) {
+    const child = await readMp4Box(handle, trackOffset, track.end);
+    if (!child) return false;
+    if (child.type === 'mdia') {
+      let mediaOffset = child.contentStart;
+      while (mediaOffset < child.end && boxBudget.count++ < 10_000) {
+        const mediaChild = await readMp4Box(handle, mediaOffset, child.end);
+        if (!mediaChild) return false;
+        if (mediaChild.type === 'hdlr' && mediaChild.contentStart + 12 <= mediaChild.end) {
+          const payload = Buffer.alloc(12);
+          const { bytesRead } = await handle.read(payload, 0, 12, mediaChild.contentStart);
+          return bytesRead === 12 && payload.subarray(8, 12).toString('ascii') === 'vide';
+        }
+        mediaOffset = mediaChild.end;
+      }
+    }
+    trackOffset = child.end;
+  }
+  return false;
+}
+
+async function validateMp4(file) {
+  const invalid = () => {
+    const error = new Error('Use a valid MP4 video.');
+    error.code = 'INVALID_VIDEO';
+    return error;
+  };
+  const handle = await fs.promises.open(file.path, 'r');
+  try {
+    const stat = await handle.stat();
+    let offset = 0;
+    let validBrand = false;
+    let hasVideoTrack = false;
+    const boxBudget = { count: 0 };
+    while (offset < stat.size && boxBudget.count++ < 10_000) {
+      const box = await readMp4Box(handle, offset, stat.size);
+      if (!box) throw invalid();
+      if (box.type === 'ftyp') {
+        const brandLength = Math.min(box.size - box.headerSize, 256);
+        if (brandLength < 8) throw invalid();
+        const brandsBuffer = Buffer.alloc(brandLength);
+        const { bytesRead } = await handle.read(brandsBuffer, 0, brandLength, box.contentStart);
+        if (bytesRead !== brandLength) throw invalid();
+        const brands = [];
+        brands.push(brandsBuffer.subarray(0, 4).toString('ascii'));
+        for (let index = 8; index + 4 <= brandLength; index += 4) {
+          brands.push(brandsBuffer.subarray(index, index + 4).toString('ascii'));
+        }
+        validBrand = brands.some(brand =>
+          /^(isom|iso[2-9]|mp4[12]|avc1|dash|M4V |MSNV|F4V )$/.test(brand)
+        ) && !brands.includes('qt  ');
+      } else if (box.type === 'moov') {
+        let childOffset = box.contentStart;
+        while (childOffset < box.end && boxBudget.count++ < 10_000) {
+          const child = await readMp4Box(handle, childOffset, box.end);
+          if (!child) throw invalid();
+          if (child.type === 'trak' && await mp4TrackIsVideo(handle, child, boxBudget)) {
+            hasVideoTrack = true;
+            break;
+          }
+          childOffset = child.end;
+        }
+      }
+      if (validBrand && hasVideoTrack) return;
+      offset = box.end;
+    }
+    throw invalid();
+  } catch (error) {
+    if (error.code === 'INVALID_VIDEO') throw error;
+    throw invalid();
+  } finally {
+    await handle.close();
+  }
+}
+
+function telegramConfig() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const channelId = process.env.TELEGRAM_CHANNEL_ID;
+  if (!token || !channelId) throw new Error('Telegram video storage is not configured.');
+  return { token, channelId };
+}
+
+async function sendVideoToTelegram(file) {
+  const { token, channelId } = telegramConfig();
+  const form = new FormData();
+  form.append('chat_id', channelId);
+  form.append('video', fs.createReadStream(file.path), {
+    filename: path.basename(file.originalname || file.filename),
+    contentType: file.mimetype,
+  });
+  form.append('supports_streaming', 'true');
+  const response = await axios.post(`https://api.telegram.org/bot${token}/sendVideo`, form, {
+    headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity, timeout: 90_000,
+  });
+  const fileId = response.data?.result?.video?.file_id;
+  if (!response.data?.ok || !fileId) throw new Error('Telegram did not return a video file ID.');
+  return fileId;
+}
+
+async function telegramFilePath(fileId) {
+  const cached = telegramFilePathCache.get(fileId);
+  if (cached && cached.expiresAt > Date.now()) return cached.filePath;
+  if (cached) telegramFilePathCache.delete(fileId);
+  const { token } = telegramConfig();
+  const response = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+    params: { file_id: fileId }, timeout: 20_000,
+  });
+  const filePath = response.data?.result?.file_path;
+  if (!response.data?.ok || !filePath) throw new Error('Telegram could not resolve this video.');
+  telegramFilePathCache.set(fileId, { filePath, expiresAt: Date.now() + TELEGRAM_FILE_PATH_CACHE_MS });
+  return filePath;
+}
 
 // --- rate limit: 1 post per 3 minutes per IP ---
 const lastPost = new Map();
@@ -154,11 +360,17 @@ router.get('/chat/admin', (req, res) => res.sendFile(path.join(__dirname, 'publi
 
 // --- public API ---
 router.post('/api/chat/posts', (req, res) => {
-  upload.single('image')(req, res, async (err) => {
+  upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }])(req, res, async (err) => {
     if (err) {
-      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 5MB.' : err.message;
+      await removeTemporaryUploads(req);
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? (err.field === 'image' ? 'Image must be under 5MB.' : 'Videos must be 20MB or smaller.')
+        : err.message;
       return res.status(400).json({ success: false, message: msg });
     }
+    const cleanupOnAbort = () => { removeTemporaryUploads(req).catch(() => {}); };
+    req.once('aborted', cleanupOnAbort);
+    res.once('close', () => { if (!res.writableEnded) cleanupOnAbort(); });
     try {
       const ip = clientIp(req);
       const last = lastPost.get(ip);
@@ -169,35 +381,36 @@ router.post('/api/chat/posts', (req, res) => {
       const text = (req.body.text || '').trim();
       if (!text) return res.status(400).json({ success: false, message: 'Confession text is required.' });
       if (text.length > 500) return res.status(400).json({ success: false, message: 'Max 500 characters.' });
+      const mood = String(req.body.mood || '');
+      if (!CHAT_MOODS.has(mood)) return res.status(400).json({ success: false, message: 'Choose a valid mood.' });
 
-      let imageData = null, imageType = null;
-      if (req.file) {
-        // Re-encode with sharp: strips ALL metadata (EXIF/GPS) for privacy,
-        // resizes to max 1200×1200, and compresses to ~75% quality (~400 KB target).
-        const MAX_PX = 1200;
-        const QUALITY = 75;
-        const resizeOpts = { width: MAX_PX, height: MAX_PX, fit: 'inside', withoutEnlargement: true };
-        if (req.file.mimetype === 'image/png') {
-          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).png({ quality: QUALITY, compressionLevel: 8 }).toBuffer();
-          imageType = 'image/png';
-        } else if (req.file.mimetype === 'image/webp') {
-          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).webp({ quality: QUALITY }).toBuffer();
-          imageType = 'image/webp';
-        } else {
-          imageData = await sharp(req.file.buffer).rotate().resize(resizeOpts).jpeg({ quality: QUALITY, mozjpeg: true }).toBuffer();
-          imageType = 'image/jpeg';
-        }
-      }
+      const image = req.files?.image?.[0] || null;
+      const video = req.files?.video?.[0] || null;
+      if (image && video) return res.status(400).json({ success: false, message: 'Choose either an image or a video.' });
+      if (image && image.size > IMAGE_MAX_BYTES) return res.status(400).json({ success: false, message: 'Image must be under 5MB.' });
+      const { data: imageData, type: imageType } = await compressImage(image);
+      if (video) await validateMp4(video);
+      const videoFileId = video ? await sendVideoToTelegram(video) : null;
 
       await pool.query(
-        `INSERT INTO confessions (text, image_data, image_type, status) VALUES ($1, $2, $3, 'pending')`,
-        [text, imageData, imageType]
+        `INSERT INTO confessions (text, image_data, image_type, video_file_id, mood, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        [text, imageData, imageType, videoFileId, mood]
       );
       lastPost.set(ip, Date.now());
       res.json({ success: true, message: 'Your post has been submitted for approval. It will appear once an admin approves it.' });
     } catch (e) {
       console.error('post submit error:', e.message);
-      res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+      if (e.code === 'INVALID_VIDEO') {
+        res.status(400).json({ success: false, message: e.message });
+      } else {
+        const message = e.message === 'Telegram video storage is not configured.'
+          ? 'Telegram video uploads are not configured.'
+          : 'Something went wrong. Please try again.';
+        res.status(500).json({ success: false, message });
+      }
+    } finally {
+      await removeTemporaryUploads(req);
     }
   });
 });
@@ -206,19 +419,20 @@ router.get('/api/chat/posts', async (req, res) => {
   try {
     const PAGE_SIZE = 10;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const day  = (req.query.day && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day)) ? req.query.day : '';
+    const mood = CHAT_MOODS.has(req.query.mood) ? req.query.mood : '';
 
-    const cacheKey = `p${page}|d${day}`;
+    const cacheKey = `p${page}|m${mood || 'all'}`;
     const cached = getFeedCache(cacheKey);
     if (cached) return res.json(cached);
 
     const offset = (page - 1) * PAGE_SIZE;
     const params = [];
     let where = `status = 'approved'`;
-    if (day) { params.push(day); where += ` AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`; }
+    if (mood) { params.push(mood); where += ` AND mood = $1`; }
 
     const { rows } = await pool.query(
-      `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, created_at,
+      `SELECT id, post_number, text, mood, (image_data IS NOT NULL) AS has_image,
+              (video_file_id IS NOT NULL) AS has_video, video_file_id, created_at,
               react_heart, react_laugh, react_wow, react_sad, react_fire, react_up,
               (SELECT COUNT(*) FROM confession_comments cc
                WHERE cc.confession_id = confessions.id AND cc.status = 'approved') AS comment_count
@@ -250,6 +464,43 @@ router.get('/api/chat/image/:id', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=300');
     res.send(rows[0].image_data);
   } catch { res.status(500).end(); }
+});
+
+router.get('/api/chat/stream/:fileId', async (req, res) => {
+  try {
+    const fileId = String(req.params.fileId || '');
+    if (!fileId || fileId.length > 512) return res.status(400).end();
+    const { rows } = await pool.query(
+      `SELECT status FROM confessions WHERE video_file_id = $1`,
+      [fileId]
+    );
+    const isAdmin = Boolean(process.env.ADMIN_PASSWORD && req.headers['x-admin-password'] === process.env.ADMIN_PASSWORD);
+    if (!rows.length || (rows[0].status !== 'approved' && !isAdmin)) return res.status(404).end();
+
+    const { token } = telegramConfig();
+    const filePath = await telegramFilePath(fileId);
+    const upstream = await axios.get(`https://api.telegram.org/file/bot${token}/${filePath}`, {
+      responseType: 'stream',
+      headers: req.headers.range ? { Range: req.headers.range } : undefined,
+      timeout: 30_000,
+      validateStatus: code => code === 200 || code === 206,
+    });
+    res.status(upstream.status);
+    res.set('Content-Type', 'video/mp4');
+    res.set('Accept-Ranges', 'bytes');
+    res.set('Cache-Control', 'private, max-age=300');
+    if (upstream.headers['content-length']) res.set('Content-Length', upstream.headers['content-length']);
+    if (upstream.headers['content-range']) res.set('Content-Range', upstream.headers['content-range']);
+    upstream.data.on('error', error => {
+      console.error('[chat] video stream error:', error.message);
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy(error);
+    });
+    upstream.data.pipe(res);
+  } catch (error) {
+    console.error('[chat] stream error:', error.message);
+    if (!res.headersSent) res.status(502).end();
+  }
 });
 
 const VALID_EMOJIS = new Set(['heart','laugh','wow','sad','fire','up']);
@@ -327,7 +578,8 @@ router.post('/api/chat/admin/login', requireAdmin, (req, res) => res.json({ succ
 router.get('/api/chat/admin/queue', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, post_number, text, (image_data IS NOT NULL) AS has_image, status, reported, created_at
+      `SELECT id, post_number, text, mood, (image_data IS NOT NULL) AS has_image,
+              (video_file_id IS NOT NULL) AS has_video, video_file_id, status, reported, created_at
        FROM confessions WHERE status = 'pending' OR reported = TRUE ORDER BY created_at ASC`);
     res.json({ success: true, posts: rows });
   } catch (e) {
