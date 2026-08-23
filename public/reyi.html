@@ -283,17 +283,17 @@
     }finally{
       button.disabled=false;button.textContent='Send';
     }
-
-   async function report(id,button){
-     if(!confirm('Report this post to the admin?'))return;
-     try{
-       const response=await fetch(`/api/reyi/posts/${id}/report`,{method:'POST'});
-       const data=await response.json();
-       if(response.status===403){refreshStatus();return;}
-       button.textContent=data.success?'⚑ Reported ✓':'⚑ Report';
-       button.disabled=Boolean(data.success);
-     }catch{}
    }
+
+  async function report(id,button){
+    if(!confirm('Report this post to the admin?'))return;
+    try{
+      const response=await fetch(`/api/reyi/posts/${id}/report`,{method:'POST'});
+      const data=await response.json();
+      if(response.status===403){refreshStatus();return;}
+      button.textContent=data.success?'⚑ Reported ✓':'⚑ Report';
+      button.disabled=Boolean(data.success);
+    }catch{}
   }
 
   function postCard(post){
