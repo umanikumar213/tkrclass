@@ -73,6 +73,23 @@
   .react{border:1px solid var(--line);border-radius:999px;padding:6px 9px;background:#101015;color:var(--muted);font:500 13px Inter,sans-serif;cursor:pointer;transition:.25s ease}
   .react:hover,.react.sel{border-color:#ff6a3d88;background:#ff6a3d19;color:#ffe1d6}
   .react span{font-size:11px;margin-left:3px}
+   .post-actions{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line)}
+   .post-actions .reactions{padding:12px 16px}
+   .comment-toggle{border:0;background:transparent;color:var(--muted);font:500 12px Inter,sans-serif;cursor:pointer;padding:10px 16px;white-space:nowrap}
+   .comment-toggle:hover{color:var(--text)}
+   .comments{border-top:1px solid var(--line);padding:12px 16px 14px;background:#100f13}
+   .comment-list{margin-bottom:10px}
+   .comment-item{padding:8px 0;border-bottom:1px solid #28242c}
+   .comment-item:last-child{border-bottom:0}
+   .comment-text{font-size:13px;white-space:pre-wrap;word-break:break-word;color:#d8d3d8}
+   .comment-date{font-size:10px;color:var(--dim);margin-top:2px}
+   .comment-empty{font-size:12px;color:var(--dim);padding:4px 0 8px}
+   .comment-form{display:flex;gap:7px;align-items:end}
+   .comment-form textarea{min-height:42px;max-height:92px;padding:8px 9px;font-size:12px}
+   .comment-send{border:0;border-radius:8px;padding:9px 11px;background:#302942;color:#e8e2ff;font:600 12px Inter,sans-serif;cursor:pointer;white-space:nowrap}
+   .comment-send:disabled{opacity:.55;cursor:not-allowed}
+   .comment-msg{display:none;font-size:11px;margin-top:7px;color:#ffca80}
+   .comment-msg.show{display:block}
   #more{display:none;width:100%;border:1px solid var(--line);border-radius:12px;padding:11px;background:#151319;color:var(--muted);font:500 13px Inter,sans-serif;cursor:pointer;transition:.3s}
   #more:hover{color:var(--text);border-color:#8a7cff88}
   #more:disabled{opacity:.5;cursor:not-allowed}
@@ -100,7 +117,7 @@
   </section>
 
   <section id="openView" class="hidden">
-    <p class="intro"><b>A night space for feelings that stay with you.</b> Anonymous stories and links are reviewed before they appear.</p>
+    <p class="intro"><b>A night space for things left unsaid.</b></p>
     <section class="panel composer">
       <div class="type-switch">
         <button class="type-btn active" data-type="video" onclick="chooseType('video')">Share a video</button>
@@ -108,14 +125,18 @@
       </div>
       <label for="category">Mood</label>
       <select id="category">
-        <option>Heartbreak</option><option>Inspiration</option><option>Goosebumps</option><option>Deep Thoughts</option><option>Late Night Vibe</option>
+        <option value="Heartache">💔 Heartache</option>
+        <option value="Nostalgia">🌧️ Nostalgia</option>
+        <option value="Goosebumps">⚡ Goosebumps</option>
+        <option value="Midnight Thoughts">🌙 Midnight Thoughts</option>
+        <option value="Alone">🌌 Alone</option>
+        <option value="Healing">✨ Healing</option>
       </select>
       <label for="caption">Caption <span>(optional · 150 max)</span></label>
       <input id="caption" maxlength="150" placeholder="A short thought before the moment…">
       <div id="videoFields">
         <label for="videoUrl">YouTube or Instagram Reel link</label>
         <input id="videoUrl" inputmode="url" placeholder="Paste a YouTube or Instagram link">
-        <p class="field-note">Your link is reviewed by an admin before it appears. Videos play from YouTube or Instagram, not our server.</p>
       </div>
       <div id="storyFields" class="hidden">
         <label for="storyText">Your story <span>(2000 max)</span></label>
@@ -133,8 +154,8 @@
 <div id="goodbye" class="dawn-goodbye">సూర్యోదయం అవుతోంది...<br>మళ్ళీ రేయి కలుద్దాం</div>
 
 <script>
-  const CATEGORIES=['All','Heartbreak','Inspiration','Goosebumps','Deep Thoughts','Late Night Vibe'];
-  const REACTIONS=[['heartbreak','💔'],['sad','😢'],['love','😍'],['fire','🔥'],['sparkles','✨']];
+  const MOODS=[['Heartache','💔 Heartache'],['Nostalgia','🌧️ Nostalgia'],['Goosebumps','⚡ Goosebumps'],['Midnight Thoughts','🌙 Midnight Thoughts'],['Alone','🌌 Alone'],['Healing','✨ Healing']];
+  const REACTIONS=[['heartache','💔'],['pleading','🥺'],['goosebumps','⚡'],['hug','🫂'],['healing','✨']];
   let type='video',selectedCategory='',page=1,hasMore=false,loading=false,isOpen=false,nextOpenAt=null,booted=false;
 
   const $=id=>document.getElementById(id);
@@ -167,20 +188,21 @@
   }
 
   function renderTabs(){
-    $('tabs').innerHTML=CATEGORIES.map(category=>{
-      const active=(category==='All'?!selectedCategory:selectedCategory===category);
-      return `<button class="tab ${active?'active':''}" data-category="${attr(category)}" onclick="pickCategory(this.dataset.category)">${esc(category)}</button>`;
+    $('tabs').innerHTML=[['','All'],...MOODS].map(([category,label])=>{
+      const active=category===selectedCategory;
+      return `<button class="tab ${active?'active':''}" data-category="${attr(category)}" onclick="pickCategory(this.dataset.category)">${esc(label)}</button>`;
     }).join('');
   }
 
   function pickCategory(category){
-    selectedCategory=category==='All'?'':category;
+    selectedCategory=category;
     page=1;hasMore=false;$('feed').innerHTML='';$('more').style.display='none';
     renderTabs();loadFeed();
   }
 
   function reactionFor(id){return localStorage.getItem(`reyi_reaction_${id}`)||null;}
   function setReaction(id,value){if(value)localStorage.setItem(`reyi_reaction_${id}`,value);else localStorage.removeItem(`reyi_reaction_${id}`);}
+  function moodLabel(value){return (MOODS.find(([key])=>key===value)||[])[1]||value;}
   function reactionBar(post){
     const current=reactionFor(post.id);
     return `<div class="reactions">${REACTIONS.map(([key,emoji])=>
@@ -207,14 +229,64 @@
     }catch{}
   }
 
+  async function toggleComments(id,button){
+    const section=$(`comments-${id}`);
+    if(section.style.display!=='none'){
+      section.style.display='none';
+      button.textContent=button.dataset.label;
+      return;
+    }
+    section.style.display='block';
+    if(section.dataset.loaded)return;
+    section.innerHTML='<div class="comment-empty">Loading…</div>';
+    try{
+      const response=await fetch(`/api/reyi/posts/${id}/comments`);
+      const data=await response.json();
+      if(response.status===403){refreshStatus();return;}
+      if(!data.success)throw new Error();
+      renderComments(id,data.comments,section);
+      section.dataset.loaded='1';
+    }catch{section.innerHTML='<div class="comment-empty">Could not load comments.</div>';}
+  }
+
+  function renderComments(id,comments,section){
+    const list=comments.length
+      ?comments.map(comment=>`<div class="comment-item"><div class="comment-text">${esc(comment.text)}</div><div class="comment-date">${relativeTime(comment.created_at)}</div></div>`).join('')
+      :'<div class="comment-empty">No comments yet.</div>';
+    section.innerHTML=`<div class="comment-list">${list}</div>
+      <div class="comment-form"><textarea id="comment-${id}" maxlength="280" placeholder="Write a comment…"></textarea><button class="comment-send" onclick="submitComment(${id})">Send</button></div>
+      <div id="comment-msg-${id}" class="comment-msg"></div>`;
+  }
+
+  async function submitComment(id){
+    const input=$(`comment-${id}`),message=$(`comment-msg-${id}`),button=input.closest('.comment-form').querySelector('button');
+    const text=input.value.trim();
+    if(!text){message.className='comment-msg show';message.textContent='Write a comment first.';return;}
+    button.disabled=true;button.textContent='Sending…';
+    try{
+      const response=await fetch(`/api/reyi/posts/${id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      const data=await response.json();
+      if(response.status===403){refreshStatus();return;}
+      message.className='comment-msg show';message.textContent=data.message||(data.success?'Sent.':'Could not send comment.');
+      if(data.success)input.value='';
+    }catch{
+      message.className='comment-msg show';message.textContent='Could not send comment.';
+    }finally{
+      button.disabled=false;button.textContent='Send';
+    }
+  }
+
   function postCard(post){
     const caption=post.caption?`<div class="post-caption">${esc(post.caption)}</div>`:'';
     const media=post.post_type==='video'
       ?`<div class="video-frame"><iframe src="${attr(post.video_url)}" title="Reyi video #${post.post_number}" loading="lazy" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="story-image" src="/api/reyi/image/${post.id}" loading="lazy" alt="">`:''}`;
+    const count=Number(post.comment_count)||0;
+    const commentLabel=`💬 ${count} ${count===1?'comment':'comments'}`;
     return `<article class="panel post">
-      <div class="post-head"><div><span class="post-number">#${post.post_number}</span> <span class="tag">${esc(post.category)}</span></div><time class="post-time">${relativeTime(post.created_at)}</time></div>
-      ${caption}${media}${reactionBar(post)}
+      <div class="post-head"><div><span class="post-number">#${post.post_number}</span> <span class="tag">${esc(moodLabel(post.category))}</span></div><time class="post-time">${relativeTime(post.created_at)}</time></div>
+      ${caption}${media}<div class="post-actions">${reactionBar(post)}<button class="comment-toggle" data-label="${commentLabel}" onclick="toggleComments(${post.id},this)">${commentLabel}</button></div>
+      <section id="comments-${post.id}" class="comments" style="display:none"></section>
     </article>`;
   }
 

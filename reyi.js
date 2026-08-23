@@ -13,15 +13,17 @@ const pool = new Pool({
     : false,
 });
 
-const CATEGORIES = new Set(['Heartbreak', 'Inspiration', 'Goosebumps', 'Deep Thoughts', 'Late Night Vibe']);
-const REACTIONS = new Set(['heartbreak', 'sad', 'love', 'fire', 'sparkles']);
+const CATEGORIES = new Set(['Heartache', 'Nostalgia', 'Goosebumps', 'Midnight Thoughts', 'Alone', 'Healing']);
+const REACTIONS = new Set(['heartache', 'pleading', 'goosebumps', 'hug', 'healing']);
 const REYI_PAGE_SIZE = 10;
 const REYI_CACHE_TTL = 300_000;
 const feedCache = new Map();
 const lastSubmission = new Map();
+const lastComment = new Map();
 const reactionWindows = new Map();
 const adminFailures = new Map();
 const SUBMISSION_RATE_MS = 10 * 60 * 1000;
+const COMMENT_RATE_MS = 60 * 1000;
 const REACTION_WINDOW_MS = 60 * 1000;
 const REACTION_MAX_PER_WINDOW = 30;
 const ADMIN_MAX_ATTEMPTS = 5;
@@ -232,18 +234,13 @@ async function compressStoryImage(file) {
   return { data: await sharp(file.buffer).rotate().resize(resize).jpeg({ quality: 75, mozjpeg: true }).toBuffer(), type: 'image/jpeg' };
 }
 
-async function purgeExpiredPosts() {
-  const result = await pool.query(
-    `DELETE FROM reyi_posts WHERE status = 'approved' AND expires_at <= NOW()`
-  );
-  if (result.rowCount > 0) invalidateFeedCache();
-}
-
 setInterval(() => {
-  purgeExpiredPosts().catch(error => console.error('[reyi] expiry cleanup error:', error.message));
   const now = Date.now();
   for (const [ip, state] of reactionWindows) {
     if (now - state.startedAt > REACTION_WINDOW_MS * 2) reactionWindows.delete(ip);
+  }
+  for (const [ip, timestamp] of lastComment) {
+    if (now - timestamp > COMMENT_RATE_MS * 2) lastComment.delete(ip);
   }
   for (const [ip, state] of adminFailures) {
     if ((state.lockedUntil && state.lockedUntil <= now) || now - state.windowStart > ADMIN_WINDOW_MS + ADMIN_LOCKOUT_MS) {
@@ -267,13 +264,13 @@ async function initReyiDb() {
       caption            VARCHAR(150),
       status             TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
       approved_at        TIMESTAMPTZ,
-      expires_at         TIMESTAMPTZ,
+       expires_at         TIMESTAMPTZ,
       created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      react_heartbreak   INTEGER NOT NULL DEFAULT 0,
-      react_sad          INTEGER NOT NULL DEFAULT 0,
-      react_love         INTEGER NOT NULL DEFAULT 0,
-      react_fire         INTEGER NOT NULL DEFAULT 0,
-      react_sparkles     INTEGER NOT NULL DEFAULT 0
+       react_heartache    INTEGER NOT NULL DEFAULT 0,
+       react_pleading     INTEGER NOT NULL DEFAULT 0,
+       react_goosebumps   INTEGER NOT NULL DEFAULT 0,
+       react_hug          INTEGER NOT NULL DEFAULT 0,
+       react_healing      INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS reyi_counter (
       name TEXT PRIMARY KEY,
@@ -286,14 +283,40 @@ async function initReyiDb() {
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (post_id, reactor_hash)
     );
+    CREATE TABLE IF NOT EXISTS reyi_comments (
+      id         SERIAL PRIMARY KEY,
+      post_id    INTEGER NOT NULL REFERENCES reyi_posts(id) ON DELETE CASCADE,
+      text       VARCHAR(280) NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     INSERT INTO reyi_counter (name, value) VALUES ('post_number', 0)
       ON CONFLICT (name) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_reyi_posts_feed
       ON reyi_posts (status, category, post_number DESC);
-    CREATE INDEX IF NOT EXISTS idx_reyi_posts_expiry
-      ON reyi_posts (expires_at);
+    CREATE INDEX IF NOT EXISTS idx_reyi_comments_post
+      ON reyi_comments (post_id);
   `);
-  await purgeExpiredPosts();
+  await pool.query(`
+    ALTER TABLE reyi_posts
+      ADD COLUMN IF NOT EXISTS react_heartache INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_pleading INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_goosebumps INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_hug INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS react_healing INTEGER NOT NULL DEFAULT 0;
+    UPDATE reyi_posts
+    SET category = CASE category
+      WHEN 'Heartbreak' THEN 'Heartache'
+      WHEN 'Inspiration' THEN 'Healing'
+      WHEN 'Deep Thoughts' THEN 'Midnight Thoughts'
+      WHEN 'Late Night Vibe' THEN 'Alone'
+      ELSE category
+    END
+    WHERE category IN ('Heartbreak', 'Inspiration', 'Deep Thoughts', 'Late Night Vibe');
+    UPDATE reyi_posts SET expires_at = NULL WHERE expires_at IS NOT NULL;
+    DELETE FROM reyi_reactions
+    WHERE emoji NOT IN ('heartache', 'pleading', 'goosebumps', 'hug', 'healing');
+  `);
   console.log('[reyi] DB schema ready');
 }
 
@@ -360,7 +383,7 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
         [postType, videoSourceType, videoUrl, storyText, imageData, imageType, category, caption || null]
       );
       lastSubmission.set(ip, Date.now());
-      res.json({ success: true, message: 'Submitted for admin approval.' });
+      res.json({ success: true, message: 'Sent.' });
     } catch (error) {
       console.error('[reyi] submission error:', error.message);
       res.status(500).json({ success: false, message: 'Could not submit right now.' });
@@ -370,7 +393,6 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
 
 router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
   try {
-    await purgeExpiredPosts();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const category = CATEGORIES.has(req.query.category) ? req.query.category : '';
     const cacheKey = `p${page}|c${category || 'all'}`;
@@ -379,15 +401,17 @@ router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
 
     const offset = (page - 1) * REYI_PAGE_SIZE;
     const values = [];
-    let where = `status = 'approved' AND expires_at > NOW()`;
+    let where = `status = 'approved'`;
     if (category) {
       values.push(category);
       where += ` AND category = $1`;
     }
     const { rows } = await pool.query(
       `SELECT id, post_number, post_type, video_source_type, video_url, story_text,
-              (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at,
-              react_heartbreak, react_sad, react_love, react_fire, react_sparkles
+               (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at,
+               react_heartache, react_pleading, react_goosebumps, react_hug, react_healing,
+               (SELECT COUNT(*) FROM reyi_comments rc
+                WHERE rc.post_id = reyi_posts.id AND rc.status = 'approved') AS comment_count
        FROM reyi_posts
        WHERE ${where}
        ORDER BY post_number DESC
@@ -417,11 +441,11 @@ router.get('/api/reyi/image/:id', async (req, res) => {
     if (!admin && !status.open) return res.status(403).end();
 
     const { rows } = await pool.query(
-      `SELECT story_image_data, story_image_type, status, expires_at FROM reyi_posts WHERE id = $1`,
+      `SELECT story_image_data, story_image_type, status FROM reyi_posts WHERE id = $1`,
       [id]
     );
     const post = rows[0];
-    const publiclyAvailable = post && post.status === 'approved' && post.expires_at && new Date(post.expires_at).getTime() > Date.now();
+    const publiclyAvailable = post && post.status === 'approved';
     if (!post || !post.story_image_data || (!admin && !publiclyAvailable)) {
       return res.status(404).end();
     }
@@ -452,7 +476,7 @@ router.post('/api/reyi/posts/:id/react', requireReyiOpen, async (req, res) => {
 
     await client.query('BEGIN');
     const post = await client.query(
-      `SELECT id FROM reyi_posts WHERE id = $1 AND status = 'approved' AND expires_at > NOW() FOR UPDATE`,
+      `SELECT id FROM reyi_posts WHERE id = $1 AND status = 'approved' FOR UPDATE`,
       [id]
     );
     if (!post.rows.length) {
@@ -483,6 +507,7 @@ router.post('/api/reyi/posts/:id/react', requireReyiOpen, async (req, res) => {
       await client.query(`DELETE FROM reyi_reactions WHERE post_id = $1 AND reactor_hash = $2`, [id, reactorHash]);
     }
     await client.query('COMMIT');
+    invalidateFeedCache();
     res.json({ success: true, emoji: next });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -493,16 +518,66 @@ router.post('/api/reyi/posts/:id/react', requireReyiOpen, async (req, res) => {
   }
 });
 
+router.get('/api/reyi/posts/:id/comments', requireReyiOpen, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const { rows } = await pool.query(
+      `SELECT rc.id, rc.text, rc.created_at
+       FROM reyi_comments rc
+       JOIN reyi_posts rp ON rp.id = rc.post_id
+       WHERE rc.post_id = $1 AND rc.status = 'approved' AND rp.status = 'approved'
+       ORDER BY rc.created_at ASC`,
+      [id]
+    );
+    res.json({ success: true, comments: rows });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not load comments.' });
+  }
+});
+
+router.post('/api/reyi/posts/:id/comments', requireReyiOpen, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const ip = clientIp(req);
+    const last = lastComment.get(ip);
+    if (last && Date.now() - last < COMMENT_RATE_MS) {
+      const wait = Math.ceil((COMMENT_RATE_MS - (Date.now() - last)) / 1000);
+      return res.status(429).json({ success: false, message: `Please wait ${wait}s before commenting again.` });
+    }
+    const text = String(req.body.text || '').trim();
+    if (!text) return res.status(400).json({ success: false, message: 'Comment cannot be empty.' });
+    if (text.length > 280) return res.status(400).json({ success: false, message: 'Comments must be 280 characters or fewer.' });
+    const post = await pool.query(`SELECT id FROM reyi_posts WHERE id = $1 AND status = 'approved'`, [id]);
+    if (!post.rows.length) return res.status(404).json({ success: false, message: 'Post not found.' });
+    await pool.query(`INSERT INTO reyi_comments (post_id, text) VALUES ($1, $2)`, [id, text]);
+    lastComment.set(ip, Date.now());
+    res.json({ success: true, message: 'Sent.' });
+  } catch (error) {
+    console.error('[reyi] comment error:', error.message);
+    res.status(500).json({ success: false, message: 'Could not send comment.' });
+  }
+});
+
 router.post('/api/reyi/admin/login', requireAdmin, (req, res) => res.json({ success: true }));
 
 router.get('/api/reyi/admin/queue', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows: posts } = await pool.query(
       `SELECT id, post_type, video_source_type, video_url, story_text,
               (story_image_data IS NOT NULL) AS has_story_image, category, caption, created_at
        FROM reyi_posts WHERE status = 'pending' ORDER BY created_at ASC`
     );
-    res.json({ success: true, posts: rows });
+    const { rows: comments } = await pool.query(
+      `SELECT rc.id, rc.text, rc.created_at, rp.post_number, rp.post_type,
+              COALESCE(rp.caption, rp.story_text, 'Video post') AS post_summary
+       FROM reyi_comments rc
+       JOIN reyi_posts rp ON rp.id = rc.post_id
+       WHERE rc.status = 'pending' AND rp.status = 'approved'
+       ORDER BY rc.created_at ASC`
+    );
+    res.json({ success: true, posts, comments });
   } catch {
     res.status(500).json({ success: false, message: 'Could not load queue.' });
   }
@@ -525,7 +600,7 @@ router.post('/api/reyi/admin/approve/:id', requireAdmin, async (req, res) => {
     const postNumber = counter.rows[0].value;
     await client.query(
       `UPDATE reyi_posts
-       SET status = 'approved', post_number = $1, approved_at = NOW(), expires_at = NOW() + INTERVAL '7 days'
+       SET status = 'approved', post_number = $1, approved_at = NOW(), expires_at = NULL
        WHERE id = $2`,
       [postNumber, id]
     );
@@ -549,6 +624,35 @@ router.post('/api/reyi/admin/reject/:id', requireAdmin, async (req, res) => {
     res.json({ success: true });
   } catch {
     res.status(500).json({ success: false, message: 'Could not reject post.' });
+  }
+});
+
+router.post('/api/reyi/admin/approve-comment/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    const result = await pool.query(
+      `UPDATE reyi_comments SET status = 'approved'
+       WHERE id = $1 AND status = 'pending'
+       RETURNING post_id`,
+      [id]
+    );
+    if (!result.rows.length) return res.status(400).json({ success: false, message: 'Comment is not pending.' });
+    invalidateFeedCache();
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not approve comment.' });
+  }
+});
+
+router.post('/api/reyi/admin/reject-comment/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false });
+    await pool.query(`DELETE FROM reyi_comments WHERE id = $1 AND status = 'pending'`, [id]);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not reject comment.' });
   }
 });
 

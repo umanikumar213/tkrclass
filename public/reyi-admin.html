@@ -24,6 +24,7 @@
   .error{display:none;margin-top:10px;padding:8px 10px;background:#ff79791c;color:#ff9c9c;border-radius:8px;font-size:12px}
   .error.show{display:block}
   .queue-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 12px}
+   .section-title{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:24px 0 10px}
   .type{display:inline-block;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
   .type.video{color:#ffd2c3;background:#ff6a3d1d;border:1px solid #ff6a3d55}.type.story{color:#dbd4ff;background:#8a7cff1d;border:1px solid #8a7cff55}
   .meta{float:right;font-size:11px;color:var(--dim);padding-top:3px}
@@ -37,6 +38,8 @@
   .action{flex:1;border:0;border-radius:9px;padding:10px;font:600 12px Inter,sans-serif;cursor:pointer;color:white}
   .approve{background:#237c50}.reject{background:#a53e4b}
   .empty{text-align:center;padding:42px 12px;color:var(--muted);font-size:13px}
+   .comment-tag{display:inline-block;border:1px solid #8a7cff55;background:#8a7cff1d;color:#dbd4ff;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+   .context{border-left:2px solid #514764;color:var(--muted);font-size:12px;line-height:1.5;padding-left:9px;margin:3px 0 10px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -44,7 +47,8 @@
   <section id="loginView">
     <div class="top"><h1>Reyi <span>moderation</span></h1></div>
     <form class="card" onsubmit="event.preventDefault();login()">
-      <input id="password" type="password" placeholder="Admin password">
+      <input type="text" autocomplete="username" aria-label="Admin username" style="display:none">
+      <input id="password" type="password" placeholder="Admin password" autocomplete="current-password">
       <button id="loginButton" class="primary" type="submit">Open review queue</button>
       <div id="error" class="error"></div>
     </form>
@@ -97,8 +101,22 @@
       <span class="category">${esc(post.category)}</span>
       ${caption}${content}
       <div class="actions">
-        <button class="action approve" onclick="moderate('approve',${post.id})">Approve · 7 days</button>
+         <button class="action approve" onclick="moderate('approve',${post.id})">Approve</button>
         <button class="action reject" onclick="moderate('reject',${post.id})">Reject</button>
+      </div>
+    </article>`;
+  }
+
+  function commentMarkup(comment){
+    const summary=(comment.post_summary||'').slice(0,160);
+    return `<article class="card">
+      <span class="comment-tag">Pending comment</span>
+      <span class="meta">${formatDate(comment.created_at)}</span>
+      <div class="context"><strong>On #${comment.post_number}:</strong> ${esc(summary)}${(comment.post_summary||'').length>160?'…':''}</div>
+      <div class="story">${esc(comment.text)}</div>
+      <div class="actions">
+        <button class="action approve" onclick="moderateComment('approve-comment',${comment.id})">Approve</button>
+        <button class="action reject" onclick="moderateComment('reject-comment',${comment.id},true)">Reject</button>
       </div>
     </article>`;
   }
@@ -111,7 +129,12 @@
       if(response.status===401){logout();return;}
       const data=await response.json();
       const posts=data.posts||[];
-      queue.innerHTML=posts.length?`<div class="queue-title">${posts.length} pending ${posts.length===1?'submission':'submissions'}</div>${posts.map(postMarkup).join('')}`:'<div class="empty">Nothing to review tonight.</div>';
+      const comments=data.comments||[];
+      if(!posts.length&&!comments.length){
+        queue.innerHTML='<div class="empty">Nothing to review.</div>';
+        return;
+      }
+      queue.innerHTML=`${posts.length?`<div class="section-title">Posts</div>${posts.map(postMarkup).join('')}`:''}${comments.length?`<div class="section-title">Comments</div>${comments.map(commentMarkup).join('')}`:''}`;
       document.querySelectorAll('.protected-image').forEach(async image=>{
         try{
           const response=await fetch(image.dataset.src,{headers:headers()});
@@ -123,6 +146,17 @@
 
   async function moderate(action,id){
     if(action==='reject'&&!confirm('Reject this submission? It will remain hidden.'))return;
+    try{
+      const response=await fetch(`/api/reyi/admin/${action}/${id}`,{method:'POST',headers:headers()});
+      if(response.status===401){logout();return;}
+      const data=await response.json();
+      if(!data.success){alert(data.message||'Action failed.');return;}
+      loadQueue();
+    }catch{alert('Action failed. Try again.');}
+  }
+
+  async function moderateComment(action,id,confirmIt){
+    if(confirmIt&&!confirm('Reject this comment?'))return;
     try{
       const response=await fetch(`/api/reyi/admin/${action}/${id}`,{method:'POST',headers:headers()});
       if(response.status===401){logout();return;}
