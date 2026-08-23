@@ -66,7 +66,8 @@
   .tag{font-size:10px;line-height:1;padding:5px 8px;border-radius:999px;color:#d9d0ff;background:#8a7cff1c;border:1px solid #8a7cff42;letter-spacing:.03em}
   .post-caption{font:400 21px/1.25 'DM Serif Display',Georgia,serif;padding:12px 16px 0;color:#f2eef1}
   .video-frame{position:relative;margin-top:14px;aspect-ratio:16/9;background:#08080a}
-  .video-frame iframe{height:100%;width:100%;border:0}
+   .video-frame video{height:100%;width:100%;display:block;object-fit:contain}
+   .w-full{width:100%}.rounded-xl{border-radius:12px}.bg-black{background:#000}
   .story{padding:13px 16px 0;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.8;color:#dad5d9}
   .story-image{margin:14px 16px 0;width:calc(100% - 32px);max-height:420px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
   .reactions{display:flex;gap:6px;flex-wrap:wrap;padding:14px 16px}
@@ -135,8 +136,8 @@
       <label for="caption">Caption <span>(optional · 150 max)</span></label>
       <input id="caption" maxlength="150" placeholder="A short thought before the moment…">
       <div id="videoFields">
-        <label for="videoUrl">YouTube or Instagram Reel link</label>
-        <input id="videoUrl" inputmode="url" placeholder="Paste a YouTube or Instagram link">
+         <label for="videoFile">Video file <span>(MP4, WebM, MOV · 20MB max)</span></label>
+         <div class="image-row"><label class="file-label">◫ Choose video <input id="videoFile" type="file" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" hidden></label><span id="videoName"></span></div>
       </div>
       <div id="storyFields" class="hidden">
         <label for="storyText">Your story <span>(2000 max)</span></label>
@@ -180,6 +181,10 @@
     const file=$('storyImage').files[0];
     $('imageName').textContent=file?file.name:'';
   });
+   $('videoFile').addEventListener('change',()=>{
+     const file=$('videoFile').files[0];
+     $('videoName').textContent=file?file.name:'';
+   });
 
   function showMessage(message,ok){
     const target=$('formMsg');
@@ -279,7 +284,7 @@
   function postCard(post){
     const caption=post.caption?`<div class="post-caption">${esc(post.caption)}</div>`:'';
     const media=post.post_type==='video'
-      ?`<div class="video-frame"><iframe src="${attr(post.video_url)}" title="Reyi video #${post.post_number}" loading="lazy" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+       ?`<div class="video-frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="story-image" src="/api/reyi/image/${post.id}" loading="lazy" alt="">`:''}`;
     const count=Number(post.comment_count)||0;
     const commentLabel=`💬 ${count} ${count===1?'comment':'comments'}`;
@@ -326,9 +331,12 @@
     form.append('category',$('category').value);
     form.append('caption',$('caption').value.trim());
     if(type==='video'){
-      const value=$('videoUrl').value.trim();
-      if(!value){showMessage('Paste a YouTube or Instagram link first.',false);return;}
-      form.append('video_url',value);
+       const video=$('videoFile').files[0];
+       if(!video){showMessage('Choose a video file first.',false);return;}
+       const allowed=['video/mp4','video/webm','video/quicktime'];
+       if(!allowed.includes(video.type)){showMessage('Use an MP4, WebM, or MOV video.',false);return;}
+       if(video.size>20*1024*1024){showMessage('Videos must be 20MB or smaller.',false);return;}
+       form.append('video',video);
     }else{
       const story=$('storyText').value.trim();
       if(!story){showMessage('Write your story first.',false);return;}
@@ -343,7 +351,7 @@
       if(response.status===403){refreshStatus();return;}
       showMessage(data.message||(data.success?'Submitted for approval.':'Could not submit.'),data.success);
       if(data.success){
-        $('caption').value='';$('videoUrl').value='';$('storyText').value='';$('storyImage').value='';$('imageName').textContent='';
+         $('caption').value='';$('videoFile').value='';$('videoName').textContent='';$('storyText').value='';$('storyImage').value='';$('imageName').textContent='';
       }
     }catch{showMessage('Could not reach Reyi. Try again.',false);}
     finally{button.disabled=false;button.textContent='Send into Reyi';}

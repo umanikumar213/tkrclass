@@ -32,7 +32,8 @@
   .caption{font:400 21px/1.28 'DM Serif Display',Georgia,serif;margin:3px 0 11px}
   .story{font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:#d8d3d8}
   .frame{margin-top:12px;aspect-ratio:16/9;background:#08080a;border-radius:11px;overflow:hidden}
-  iframe{height:100%;width:100%;border:0}
+   .frame video{height:100%;width:100%;display:block;object-fit:contain}
+   .w-full{width:100%}.rounded-xl{border-radius:12px}.bg-black{background:#000}
   .image{display:block;max-width:100%;max-height:400px;object-fit:cover;border-radius:11px;border:1px solid var(--line);margin-top:12px}
   .actions{display:flex;gap:8px;margin-top:16px}
   .action{flex:1;border:0;border-radius:9px;padding:10px;font:600 12px Inter,sans-serif;cursor:pointer;color:white}
@@ -85,6 +86,7 @@
   }
 
   function logout(){
+     fetch('/api/reyi/admin/logout',{method:'POST'}).catch(()=>{});
     password='';
     document.getElementById('adminView').style.display='none';
     document.getElementById('loginView').style.display='block';
@@ -93,7 +95,7 @@
   function postMarkup(post){
     const caption=post.caption?`<div class="caption">${esc(post.caption)}</div>`:'';
     const content=post.post_type==='video'
-      ?`<div class="frame"><iframe src="${attr(post.video_url)}" title="Submitted Reyi video" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+       ?`<div class="frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="image protected-image" data-src="/api/reyi/image/${post.id}" alt="Story attachment">`:''}`;
     return `<article class="card">
       <span class="type ${post.post_type}">${post.post_type}</span>
