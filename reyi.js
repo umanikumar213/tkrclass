@@ -593,63 +593,31 @@ router.get('/api/reyi/stream/:fileId', async (req, res) => {
 });
 
 router.post('/api/reyi/posts/:id/react', requireReyiOpen, async (req, res) => {
-  const client = await pool.connect();
   try {
     const id = parseInt(req.params.id, 10);
-    const { emoji } = req.body;
-    if (!Number.isInteger(id) || (emoji != null && !REACTIONS.has(emoji))) {
+    const { emoji, prev } = req.body;
+    if (!Number.isInteger(id)
+      || (emoji != null && !REACTIONS.has(emoji))
+      || (prev != null && !REACTIONS.has(prev))) {
       return res.status(400).json({ success: false });
     }
     if (!consumeReactionRate(req)) return res.status(429).json({ success: false, message: 'Too many reactions. Slow down.' });
-    const reactorHash = getReactorHash(req);
-    if (!reactorHash) {
-      return res.status(process.env.SESSION_SECRET ? 401 : 500).json({
-        success: false,
-        message: process.env.SESSION_SECRET ? 'Refresh Reyi before reacting.' : 'SESSION_SECRET is not configured.',
-      });
-    }
-
-    await client.query('BEGIN');
-    const post = await client.query(
-      `SELECT id FROM reyi_posts WHERE id = $1 AND status = 'approved' FOR UPDATE`,
+    const updates = [];
+    if (prev != null) updates.push(`react_${prev} = GREATEST(0, react_${prev} - 1)`);
+    if (emoji != null) updates.push(`react_${emoji} = react_${emoji} + 1`);
+    if (!updates.length) return res.json({ success: true, emoji: null });
+    const result = await pool.query(
+      `UPDATE reyi_posts SET ${updates.join(', ')}
+       WHERE id = $1 AND status = 'approved'
+       RETURNING id`,
       [id]
     );
-    if (!post.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false });
-    }
-    const existing = await client.query(
-      `SELECT emoji FROM reyi_reactions WHERE post_id = $1 AND reactor_hash = $2 FOR UPDATE`,
-      [id, reactorHash]
-    );
-    const previous = existing.rows[0] ? existing.rows[0].emoji : null;
-    const next = emoji;
-    const updates = [];
-    if (previous) updates.push(`react_${previous} = GREATEST(0, react_${previous} - 1)`);
-    if (next) updates.push(`react_${next} = react_${next} + 1`);
-    if (updates.length) {
-      await client.query(`UPDATE reyi_posts SET ${updates.join(', ')} WHERE id = $1`, [id]);
-    }
-    if (next) {
-      await client.query(
-        `INSERT INTO reyi_reactions (post_id, reactor_hash, emoji, updated_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (post_id, reactor_hash)
-         DO UPDATE SET emoji = EXCLUDED.emoji, updated_at = NOW()`,
-        [id, reactorHash, next]
-      );
-    } else {
-      await client.query(`DELETE FROM reyi_reactions WHERE post_id = $1 AND reactor_hash = $2`, [id, reactorHash]);
-    }
-    await client.query('COMMIT');
+    if (!result.rows.length) return res.status(404).json({ success: false });
     invalidateFeedCache();
-    res.json({ success: true, emoji: next });
+    res.json({ success: true, emoji: emoji ?? null });
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
     console.error('[reyi] reaction error:', error.message);
     res.status(500).json({ success: false });
-  } finally {
-    client.release();
   }
 });
 
