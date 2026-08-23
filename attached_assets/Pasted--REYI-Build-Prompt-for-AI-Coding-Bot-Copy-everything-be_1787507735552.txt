@@ -1,0 +1,197 @@
+# REYI (రేయి) — Build Prompt for AI Coding Bot
+
+Copy everything below into your bot (Replit AI, Cursor, etc.)
+
+---
+
+## PROJECT: Reyi — Night-Only Emotional Video Space
+
+Build a feature called **"Reyi" (రేయి)** — a time-locked, emotional video-sharing
+space inside our existing college platform (mytkr.in). It is only accessible
+from **11:00 PM to 5:00 AM** local time. Outside this window, it is fully
+locked and shows a countdown to reopening.
+
+### CORE CONCEPT
+Students share emotional / heartbreak / inspiring / goosebumps content in
+one of two forms:
+1. **Video** — pasting a YouTube URL, an Instagram Reel URL, or uploading a
+   video file directly.
+2. **Story (text-only)** — a written confession/story/moment, no video
+   required. Same night-only vibe, just words instead of a clip.
+
+Every submission (video or story) goes into the same admin approval queue
+before it appears publicly. Approved posts auto-expire after 7 days.
+
+---
+
+## 1. TIME-LOCK SYSTEM
+
+- Server-side clock check (not just client JS) — window is **23:00–05:00
+  IST**. Never trust the browser clock alone; validate on the API too so
+  people can't spoof it by changing device time.
+- Outside the window: show the **locked screen** (see UI section) with a
+  live countdown to 11:00 PM.
+- Inside the window: full Reyi experience unlocks.
+- At exactly 05:00, trigger the **Dawn Fade-Out sequence** (see below), then
+  lock.
+
+## 2. SUBMISSION FLOW
+
+- First choice on the submission form: **"Share a Video" or "Share a
+  Story"** (`post_type` = `video` | `story`). Everything below branches
+  from that.
+
+- **If `post_type = video`:**
+  `video_source_type` (`youtube` | `instagram` | `upload`), `video_url`
+  (for embeds) OR `uploaded_file` (for direct upload, store in
+  Cloudinary/S3 — never in DB).
+
+- **If `post_type = story`:**
+  `story_text` (plain text, suggest a generous cap like 2000 characters —
+  long enough for a real story, short enough to stay readable in a
+  feed). No video fields required. Optionally allow a single attached
+  image (reuse the existing confessions board's image pipeline: 5MB
+  upload, compressed to ~400KB, EXIF stripped) for a photo alongside the
+  story — but keep it optional, text-only is a valid complete post.
+
+- **Shared fields regardless of type:** `category` (Heartbreak /
+  Inspiration / Goosebumps / Deep Thoughts / Late Night Vibe), optional
+  short caption (≤150 chars) — for stories the caption can double as a
+  title/lead-in line, anonymous by default (no username shown, just a
+  post number).
+- On submit → status = `pending`, goes to admin queue (same queue for
+  both video and story posts, admin sees the type at a glance).
+- Rate limit: 1 submission per IP every 10 minutes (prevent spam),
+  applies across both types combined (not 1 video + 1 story separately).
+- Validate YouTube/Instagram URLs match expected patterns before accepting.
+
+## 3. ADMIN APPROVAL
+
+- Reuse the same admin panel pattern as our existing confessions board
+  (`/chat/admin`) — password protected.
+- Admin sees: a `post_type` badge (Video/Story) at a glance, then either
+  the embedded video preview OR the full story text (+ optional image),
+  plus category, caption, submitted time.
+- Actions: Approve / Reject (with optional reason).
+- Approved → status = `approved`, `expires_at` = approved_at + 7 days.
+- Rejected → soft-deleted, not shown anywhere.
+
+## 4. PUBLIC FEED (only rendered during the 11 PM–5 AM window)
+
+- Sorted newest-first, grouped by category tabs — videos and stories
+  mix together in the same feed/category (don't split into separate
+  feeds; a "Heartbreak" tab shows both video and text posts tagged
+  Heartbreak).
+- Each card adapts to its type: **video posts** show the embedded
+  video/reel player; **story posts** show the story text (+ optional
+  image) in a card styled to feel like a page from a journal, not a
+  cramped text block — generous line-height and padding. Both card types
+  share: category tag, post number, timestamp ("posted 2 hours ago"),
+  and the same reaction bar.
+- **Reactions only, no comments, no likes-based reordering** (same
+  philosophy as confessions board): 💔 😢 😍 🔥 ✨ — one reaction per
+  person per post, toggle on/off, cosmetic only, does not affect sort
+  order.
+- Optional "🔥 Trending Now" strip at the top — most-reacted posts
+  *within the current session's open window only* (resets each night, not
+  cumulative — keeps it feeling "tonight-specific").
+
+## 5. ATMOSPHERE & UI AESTHETICS (build these precisely)
+
+### A. Midnight Dim Mode
+- Background: deep obsidian black `#0a0a0c` — true OLED-friendly black,
+  zero eye strain in pitch-dark rooms.
+- Active/focused cards get a subtle glow ring — ember-orange
+  (`#ff6a3d` at low opacity) or neon-indigo (`#6a5cff` at low opacity),
+  soft box-shadow blur, never harsh or neon-bright.
+- Text: soft off-white (`#e8e6e3`), never pure white — avoid glare.
+- No sudden bright flashes anywhere in the UI — all transitions should be
+  slow, soft easing (400–600ms ease-in-out minimum).
+
+### B. Dawn Fade-Out (triggers automatically at ~4:50 AM, completes by 5:00 AM)
+- Over roughly 10 minutes, gradually cross-fade the background from
+  obsidian black → soft deep-twilight indigo → warm amber gradient,
+  simulating sunrise.
+- Any ambient audio playing should **linearly fade its volume down to
+  zero** across the same 10 minutes, not cut abruptly.
+- At the end of the fade, show a centered full-screen message:
+  **"సూర్యోదయం అవుతోంది... మళ్ళీ రేయి కలుద్దాం"**
+  (translation: "The sun is rising... let's meet again tonight") — then
+  transition to the locked/countdown screen.
+- This whole sequence should feel calm and ceremonial, not like an error
+  or logout — it's part of the emotional design.
+
+### C. Locked Screen (05:00–23:00)
+- Same soft-dawn aesthetic carried into daytime, or a calmer neutral
+  light state — avoid switching back to harsh dark mode while locked.
+- Show: "Reyi opens at 11:00 PM" + live countdown timer.
+- Optional gentle line: something like "kept for the quiet hours" —
+  keep copy minimal, no clutter.
+
+### D. Ambient Audio Switcher
+- Small, unobtrusive floating widget (bottom corner), collapsed by
+  default — expands on tap.
+- Three ambient tracks, loopable, low-volume by default:
+  1. Midnight Rain on Window
+  2. Lo-fi Telugu Instrumental Melodies
+  3. Campfire Crackle
+- User can toggle between tracks or turn off entirely; choice can persist
+  locally (browser storage) for the session — no server-side account
+  needed.
+- Audio must respect the Dawn Fade-Out volume ramp-down described above.
+- Autoplay must be muted-by-default / user-initiated only (browser
+  autoplay policies + basic courtesy — don't blast sound on load).
+
+## 6. DATABASE (extend existing schema, same conventions as confessions board)
+
+```
+reyi_posts table:
+- id, post_number (sequential), post_type (video | story)
+- video_source_type (nullable — youtube/instagram/upload, only for videos)
+- video_url, uploaded_file_url (nullable, only for videos)
+- story_text (nullable, only for stories), story_image_url (nullable, optional)
+- category, caption, status (pending/approved/rejected)
+- reactions (jsonb or separate reactions table, same pattern as confessions)
+- created_at, approved_at, expires_at (approved_at + 7 days)
+- reported (boolean), report_reason
+```
+
+Keep video-only and story-only fields nullable on the same table rather
+than building two separate tables — it's one feed with one moderation
+queue, just two content shapes.
+
+Reuse the confessions board's reaction and expiry-cleanup logic where
+possible — don't build a parallel system from scratch if the existing one
+already does 90% of this.
+
+## 7. TECH NOTES
+
+- Same stack as existing platform (Node/Express + PostgreSQL + Cloudinary
+  for media).
+- Embed YouTube/Instagram via their official oEmbed/iframe APIs — do not
+  scrape or download their content.
+- For uploaded videos: compress/transcode reasonably (keep file sizes
+  sane — this is video, not images, so cap upload size, e.g. 50MB, and
+  consider a max duration, e.g. 60–90 seconds).
+- Server-side timezone handling: lock all time-window logic to IST
+  regardless of user's device timezone.
+
+## 8. WHAT NOT TO BUILD
+
+- No comments section.
+- No like-based feed reordering (reactions are cosmetic only).
+- No public usernames — anonymous with post numbers only, consistent with
+  the rest of the platform.
+- No autoplay-with-sound on page load.
+
+---
+
+**Summary for the bot:** Build "Reyi," a time-gated (11 PM–5 AM IST)
+video-and-story feed reusing our confessions board's admin-approval,
+reaction, and expiry patterns, with a distinctive night-only atmosphere:
+obsidian dark mode with glow accents, a slow ceremonial "Dawn Fade-Out" at
+5 AM with a Telugu goodbye message and audio fade-to-silence, a calm
+locked/countdown screen outside the window, and an optional ambient sound
+switcher (rain / lo-fi Telugu / campfire). Posts can be either a video
+(YouTube/Instagram link or upload) or a text-only story, sharing one feed,
+one moderation queue, and one reaction system.
