@@ -49,8 +49,8 @@ const upload = multer({
   limits: { fileSize: VIDEO_MAX_BYTES },
   fileFilter: (req, file, cb) => {
     const validStoryImage = file.fieldname === 'story_image' && ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
-    const validVideo = file.fieldname === 'video' && ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.mimetype);
-    cb(validStoryImage || validVideo ? null : new Error('Use a JPG, PNG, WebP, MP4, WebM, or MOV file.'), validStoryImage || validVideo);
+    const validVideo = file.fieldname === 'video' && file.mimetype === 'video/mp4';
+    cb(validStoryImage || validVideo ? null : new Error('Use a JPG, PNG, WebP, or MP4 file.'), validStoryImage || validVideo);
   },
 });
 
@@ -272,7 +272,7 @@ async function sendVideoToTelegram(file) {
     maxContentLength: Infinity,
     timeout: 90_000,
   });
-  const fileId = response.data?.result?.video?.file_id || response.data?.result?.document?.file_id;
+  const fileId = response.data?.result?.video?.file_id;
   if (!response.data?.ok || !fileId) throw new Error('Telegram did not return a video file ID.');
   return fileId;
 }
@@ -427,7 +427,7 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
 
       if (postType === 'video') {
         if (storyImage || !videoFile) {
-          return res.status(400).json({ success: false, message: 'Choose an MP4, WebM, or MOV video file.' });
+          return res.status(400).json({ success: false, message: 'Choose an MP4 video file.' });
         }
         telegramFileId = await sendVideoToTelegram(videoFile);
       } else {

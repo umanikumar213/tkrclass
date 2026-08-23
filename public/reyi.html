@@ -136,8 +136,8 @@
       <label for="caption">Caption <span>(optional · 150 max)</span></label>
       <input id="caption" maxlength="150" placeholder="A short thought before the moment…">
       <div id="videoFields">
-         <label for="videoFile">Video file <span>(MP4, WebM, MOV · 20MB max)</span></label>
-         <div class="image-row"><label class="file-label">◫ Choose video <input id="videoFile" type="file" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" hidden></label><span id="videoName"></span></div>
+         <label for="videoFile">Video file <span>(MP4 · 20MB max)</span></label>
+         <div class="image-row"><label class="file-label">◫ Choose video <input id="videoFile" type="file" accept=".mp4,video/mp4" hidden></label><span id="videoName"></span></div>
       </div>
       <div id="storyFields" class="hidden">
         <label for="storyText">Your story <span>(2000 max)</span></label>
@@ -333,8 +333,7 @@
     if(type==='video'){
        const video=$('videoFile').files[0];
        if(!video){showMessage('Choose a video file first.',false);return;}
-       const allowed=['video/mp4','video/webm','video/quicktime'];
-       if(!allowed.includes(video.type)){showMessage('Use an MP4, WebM, or MOV video.',false);return;}
+       if(video.type!=='video/mp4'){showMessage('Use an MP4 video.',false);return;}
        if(video.size>20*1024*1024){showMessage('Videos must be 20MB or smaller.',false);return;}
        form.append('video',video);
     }else{
