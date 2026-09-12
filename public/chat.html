@@ -318,7 +318,7 @@ async function loadFeed(){
           <div class="top"><span><span class="pnum">#${p.post_number}</span><span class="mood-tag">${esc(p.mood||'Other / Casual')}</span></span><span class="pdate">${fmtDate(p.created_at)}</span></div>
           <div class="ptext">${esc(p.text)}</div>
           ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="" onload="this.classList.add('loaded')">`:''}
-          ${p.has_video?`<video class="pvideo" controls playsinline preload="metadata" src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}"></video>`:''}
+          ${p.has_video?`<video class="pvideo" controls playsinline preload="none" src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}"></video>`:''}
           ${reactRow(p)}
           <div class="pfoot">
             <button class="ccount" data-label="${label}" onclick="toggleComments(${p.id},this)">${label}</button>

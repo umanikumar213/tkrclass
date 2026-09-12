@@ -300,7 +300,7 @@
     const caption=post.caption?`<div class="post-caption">${esc(post.caption)}</div>`:'';
     const media=post.post_type==='video'
        ?(post.telegram_file_id
-         ?`<div class="video-frame"><video controls playsinline preload="metadata" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
+         ?`<div class="video-frame"><video controls playsinline preload="none" class="w-full rounded-xl bg-black" src="/api/reyi/stream/${encodeURIComponent(post.telegram_file_id)}"></video></div>`
          :'<div class="video-archived">Archived video · no longer available</div>')
       :`<div class="story">${esc(post.story_text)}</div>${post.has_story_image?`<img class="story-image" src="/api/reyi/image/${post.id}" loading="lazy" alt="">`:''}`;
     const count=Number(post.comment_count)||0;
