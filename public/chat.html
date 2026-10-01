@@ -60,6 +60,9 @@
   /* --- posts --- */
   .card{background:linear-gradient(145deg,#17151b,#100f13);border:1px solid var(--line);border-radius:20px;margin-bottom:14px;overflow:hidden}
   .post-inner{padding:14px 16px}
+  .card.pinned{border-color:#8a7cff99;background:linear-gradient(145deg,#282039,#141119);box-shadow:0 0 0 1px #8a7cff22}
+  .pinned-label{display:inline-block;margin-bottom:10px;padding:4px 9px;border:1px solid #8a7cff66;border-radius:99px;
+    background:#8a7cff26;color:#e0d9ff;font-size:11px;font-weight:700;letter-spacing:.04em}
   .post-inner .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
   .pnum{font-weight:700;font-size:15px;color:#f6dfd4}
   .pdate{font-size:11px;color:var(--faint)}
@@ -313,8 +316,9 @@ async function loadFeed(){
       const p=d.posts[i];
       const cc=parseInt(p.comment_count)||0;
       const label=`💬 ${cc} ${cc===1?'reply':'replies'}`;
-      const html=`<div class="card" id="pc-${p.id}">
+       const html=`<div class="card${p.is_pinned?' pinned':''}" id="pc-${p.id}">
         <div class="post-inner">
+          ${p.is_admin_post?`<div class="pinned-label">${p.is_pinned?'Admin · Pinned':'Admin'}</div>`:''}
           <div class="top"><span><span class="pnum">#${p.post_number}</span><span class="mood-tag">${esc(p.mood||'Other / Casual')}</span></span><span class="pdate">${fmtDate(p.created_at)}</span></div>
           <div class="ptext">${esc(p.text)}</div>
           ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" loading="lazy" alt="" onload="this.classList.add('loaded')">`:''}

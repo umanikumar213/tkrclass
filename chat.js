@@ -99,6 +99,9 @@ async function initDb() {
       ALTER COLUMN text TYPE VARCHAR(2500),
       ADD COLUMN IF NOT EXISTS video_file_id TEXT,
       ADD COLUMN IF NOT EXISTS mood TEXT NOT NULL DEFAULT 'Other / Casual';
+    ALTER TABLE confessions
+      ADD COLUMN IF NOT EXISTS is_admin_post BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE INDEX IF NOT EXISTS idx_confessions_mood_approved
       ON confessions (mood, post_number DESC) WHERE status = 'approved';
   `);
@@ -360,7 +363,7 @@ router.get('/chat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'c
 router.get('/chat/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat-admin.html')));
 
 // --- public API ---
-router.post('/api/chat/posts', (req, res) => {
+function submitPost(req, res, adminPost = false) {
   upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }])(req, res, async (err) => {
     if (err) {
       await removeTemporaryUploads(req);
@@ -375,11 +378,11 @@ router.post('/api/chat/posts', (req, res) => {
     try {
       const ip = clientIp(req);
       const last = lastPost.get(ip);
-      if (last && Date.now() - last < RATE_MS) {
+      if (!adminPost && last && Date.now() - last < RATE_MS) {
         const wait = Math.ceil((RATE_MS - (Date.now() - last)) / 1000);
         return res.status(429).json({ success: false, message: `Please wait ${Math.ceil(wait / 60)} minute(s) before posting again.` });
       }
-      const text = (req.body.text || '').trim();
+      const text = String(req.body.text || '').trim();
       if (!text) return res.status(400).json({ success: false, message: 'Confession text is required.' });
       if (text.length > 2500) return res.status(400).json({ success: false, message: 'Max 2500 characters.' });
       const mood = String(req.body.mood || '');
@@ -393,13 +396,35 @@ router.post('/api/chat/posts', (req, res) => {
       if (video) await validateMp4(video);
       const videoFileId = video ? await sendVideoToTelegram(video) : null;
 
-      await pool.query(
-        `INSERT INTO confessions (text, image_data, image_type, video_file_id, mood, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending')`,
-        [text, imageData, imageType, videoFileId, mood]
-      );
-      lastPost.set(ip, Date.now());
-      res.json({ success: true, message: 'Your post has been submitted for approval. It will appear once an admin approves it.' });
+      if (adminPost) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const counter = await client.query(
+            `UPDATE confession_counter SET value = value + 1 WHERE name = 'post_number' RETURNING value`);
+          const result = await client.query(
+            `INSERT INTO confessions
+             (text, image_data, image_type, video_file_id, mood, status, post_number, is_admin_post, is_pinned)
+             VALUES ($1, $2, $3, $4, $5, 'approved', $6, TRUE, TRUE) RETURNING id`,
+            [text, imageData, imageType, videoFileId, mood, counter.rows[0].value]);
+          await client.query('COMMIT');
+          invalidateFeedCache();
+          res.json({ success: true, id: result.rows[0].id, message: 'Published and pinned to the Reyi feed until you remove it.' });
+        } catch (error) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw error;
+        } finally {
+          client.release();
+        }
+      } else {
+        await pool.query(
+          `INSERT INTO confessions (text, image_data, image_type, video_file_id, mood, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending')`,
+          [text, imageData, imageType, videoFileId, mood]
+        );
+        lastPost.set(ip, Date.now());
+        res.json({ success: true, message: 'Your post has been submitted for approval. It will appear once an admin approves it.' });
+      }
     } catch (e) {
       console.error('post submit error:', e.message);
       if (e.code === 'INVALID_VIDEO') {
@@ -414,7 +439,11 @@ router.post('/api/chat/posts', (req, res) => {
       await removeTemporaryUploads(req);
     }
   });
-});
+}
+
+// Only this authenticated route can publish and pin; multipart fields cannot grant admin status.
+router.post('/api/chat/posts', (req, res) => submitPost(req, res));
+router.post('/api/chat/admin/posts', requireAdmin, (req, res) => submitPost(req, res, true));
 
 router.get('/api/chat/posts', async (req, res) => {
   try {
@@ -429,15 +458,15 @@ router.get('/api/chat/posts', async (req, res) => {
     const offset = (page - 1) * PAGE_SIZE;
     const params = [];
     let where = `status = 'approved'`;
-    if (mood) { params.push(mood); where += ` AND mood = $1`; }
+    if (mood) { params.push(mood); where += ` AND (mood = $1 OR is_pinned = TRUE)`; }
 
     const { rows } = await pool.query(
-      `SELECT id, post_number, text, mood, (image_data IS NOT NULL) AS has_image,
+      `SELECT id, post_number, text, mood, is_admin_post, is_pinned, (image_data IS NOT NULL) AS has_image,
               (video_file_id IS NOT NULL) AS has_video, video_file_id, created_at,
               react_heart, react_laugh, react_wow, react_sad, react_fire, react_up,
               (SELECT COUNT(*) FROM confession_comments cc
                WHERE cc.confession_id = confessions.id AND cc.status = 'approved') AS comment_count
-       FROM confessions WHERE ${where} ORDER BY post_number DESC
+       FROM confessions WHERE ${where} ORDER BY is_pinned DESC, post_number DESC, id DESC
        LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}`,
       params);
     const hasMore = rows.length > PAGE_SIZE;
@@ -582,9 +611,10 @@ router.post('/api/chat/admin/login', requireAdmin, (req, res) => res.json({ succ
 router.get('/api/chat/admin/queue', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, post_number, text, mood, (image_data IS NOT NULL) AS has_image,
+      `SELECT id, post_number, text, mood, is_admin_post, is_pinned, (image_data IS NOT NULL) AS has_image,
               (video_file_id IS NOT NULL) AS has_video, video_file_id, status, reported, created_at
-       FROM confessions WHERE status = 'pending' OR reported = TRUE ORDER BY created_at ASC`);
+       FROM confessions WHERE status = 'pending' OR reported = TRUE OR is_pinned = TRUE
+       ORDER BY is_pinned DESC, created_at ASC`);
     res.json({ success: true, posts: rows });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Could not load queue.' });

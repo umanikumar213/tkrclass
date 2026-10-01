@@ -1,0 +1,1 @@
+- [Admin announcement scope](admin-announcements.md) — homepage notice is separate; admin-authored pinned posts belong only in the daytime Reyi feed.

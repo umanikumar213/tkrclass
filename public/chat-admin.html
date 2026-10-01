@@ -14,8 +14,9 @@
   h1{font-size:22px;color:var(--maroon);margin-bottom:16px}
   h2{font-size:15px;font-weight:700;color:var(--sub);letter-spacing:.05em;text-transform:uppercase;margin:24px 0 10px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;padding:18px}
-  input{width:100%;padding:12px;font-family:inherit;font-size:15px;border:1px solid var(--line);border-radius:10px;outline:none}
-  input:focus{border-color:var(--maroon)}
+  input,textarea,select{width:100%;padding:12px;font-family:inherit;font-size:15px;border:1px solid var(--line);border-radius:10px;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--maroon)}
+  textarea{min-height:130px;resize:vertical}
   .btn{width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;
     font-weight:600;font-size:14px;color:#fff;background:var(--maroon)}
   .btn:disabled{opacity:.55}
@@ -24,6 +25,8 @@
   .tag.pending{background:var(--amber-soft);color:#8a6100}
   .tag.reported{background:var(--red-soft);color:var(--red)}
   .tag.comment{background:var(--blue-soft);color:var(--blue)}
+  .tag.pinned{background:var(--amber-soft);color:var(--maroon);border:1px solid var(--gold)}
+  .card.admin-post{border-color:var(--gold)}
   .ptext{font-size:14px;white-space:pre-wrap;word-break:break-word}
   .pimg{margin-top:10px;border-radius:10px;max-width:100%;border:1px solid var(--line)}
    .pvideo{width:100%;max-height:360px;display:block;margin-top:10px;border:1px solid var(--line);border-radius:10px;background:#111}
@@ -38,6 +41,24 @@
   .parent-quote{background:#f5f0ec;border-left:3px solid var(--line);padding:7px 10px;border-radius:0 6px 6px 0;
     font-size:12px;color:var(--sub);margin-bottom:10px;white-space:pre-wrap;word-break:break-word}
   .parent-quote strong{color:var(--maroon);font-size:11px;display:block;margin-bottom:2px}
+  fieldset{border:0;min-width:0}
+  .compose-title{margin:0 0 8px;color:var(--maroon)}
+  .compose-help{font-size:13px;color:var(--sub);margin-bottom:14px}
+  .field-label{display:block;font-size:13px;font-weight:600;margin:12px 0 6px}
+  .counter{text-align:right;font-size:12px;color:var(--sub);margin-top:4px}
+  .attachments{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .filebtn{position:relative;display:inline-block;padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-size:13px;color:var(--maroon);cursor:pointer;overflow:hidden}
+  .filebtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  .filebtn:focus-within{outline:2px solid var(--maroon);outline-offset:2px}
+  fieldset:disabled .filebtn{opacity:.55}
+  .attachment-name{font-size:12px;color:var(--sub);overflow-wrap:anywhere;margin-top:8px}
+  .attachment-remove{margin-top:6px}
+  .compose-msg{font-size:13px;margin-top:10px}
+  .compose-msg.ok{color:var(--green)}
+  .compose-msg.bad,.media-status.error{color:var(--red)}
+  .media-status{font-size:12px;color:var(--sub);margin-top:10px}
+  .pimg[hidden],.pvideo[hidden]{display:none}
+  button:disabled{cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -53,15 +74,119 @@
 
   <div id="adminView" style="display:none">
     <div class="topbar"><h1 style="margin:0">Review queue</h1><button class="link" onclick="logout()">Logout</button></div>
+    <form class="card" id="postComposer" onsubmit="event.preventDefault();publishPost()">
+      <h2 class="compose-title">Publish an admin post</h2>
+      <p class="compose-help">Publish directly to <a href="/chat" target="_blank" rel="noopener">/chat</a> as a highlighted, pinned admin post. No approval needed.</p>
+      <fieldset id="composerFields">
+        <label class="field-label" for="postText">Post text</label>
+        <textarea id="postText" required maxlength="2500" placeholder="Write your admin post…" aria-describedby="postCounter"></textarea>
+        <div class="counter" id="postCounter"><span id="postCount">0</span>/2500</div>
+        <label class="field-label" for="postMood">Mood</label>
+        <select id="postMood">
+          <option value="Heartache">💔 Heartache</option>
+          <option value="Nostalgia">🌧️ Nostalgia</option>
+          <option value="Goosebumps">⚡ Goosebumps</option>
+          <option value="Midnight Thoughts">🌙 Midnight Thoughts</option>
+          <option value="Alone">🌌 Alone</option>
+          <option value="Other / Casual" selected>✨ Other / Casual</option>
+        </select>
+        <div class="attachments">
+          <label class="filebtn">Add image<input type="file" id="postImage" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" aria-label="Attach image" aria-describedby="mediaHelp"></label>
+          <label class="filebtn">Add video<input type="file" id="postVideo" accept="video/mp4,.mp4" aria-label="Attach video" aria-describedby="mediaHelp"></label>
+        </div>
+        <p class="compose-help" id="mediaHelp" style="margin:8px 0 0">Optional: one image (JPEG, PNG or WebP, up to 5MB) OR one MP4 video (up to 20MB).</p>
+        <div class="attachment-name" id="attachmentName" aria-live="polite"></div>
+        <button class="link attachment-remove" type="button" id="removeAttachment" onclick="clearAttachment()" hidden>Remove attachment</button>
+        <button class="btn" id="publishBtn" type="submit" disabled>Publish pinned post</button>
+      </fieldset>
+      <div class="compose-msg" id="publishMsg" role="status" aria-live="polite"></div>
+    </form>
     <div id="queue"></div>
   </div>
 </div>
 
 <script>
 let PASS='';
+let authVersion=0,queueVersion=0,queueController=null,publishing=false;
+const mediaUrls=new Set();
+const postText=document.getElementById('postText');
+const postImage=document.getElementById('postImage');
+const postVideo=document.getElementById('postVideo');
 function hdr(){return {'x-admin-password':PASS};}
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(s){const d=new Date(s);return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});}
+
+function publishMessage(message,ok){
+  const el=document.getElementById('publishMsg');
+  el.textContent=message;el.className='compose-msg '+(ok?'ok':'bad');
+}
+function updateComposer(){
+  document.getElementById('postCount').textContent=postText.value.length;
+  document.getElementById('publishBtn').disabled=publishing||!postText.value.trim()||postText.value.length>2500;
+  const file=postImage.files[0]||postVideo.files[0];
+  document.getElementById('attachmentName').textContent=file?file.name:'';
+  document.getElementById('removeAttachment').hidden=!file;
+}
+function clearAttachment(){postImage.value='';postVideo.value='';updateComposer();}
+function attachmentError(image,video){
+  if(image&&video)return 'Choose either an image or a video, not both.';
+  if(image&&!['image/jpeg','image/png','image/webp'].includes(image.type))return 'Image must be a JPEG, PNG or WebP file.';
+  if(image&&image.size>5*1024*1024)return 'Image must be 5MB or smaller.';
+  if(video&&video.type!=='video/mp4')return 'Video must be an MP4 file.';
+  if(video&&video.size>20*1024*1024)return 'Video must be 20MB or smaller.';
+  return '';
+}
+function selectAttachment(input,other){
+  const file=input.files[0];
+  if(file){
+    const error=attachmentError(input===postImage?file:null,input===postVideo?file:null);
+    if(error){input.value='';publishMessage(error,false);}
+    else{other.value='';publishMessage('',false);}
+  }
+  updateComposer();
+}
+postText.addEventListener('input',updateComposer);
+postImage.addEventListener('change',()=>selectAttachment(postImage,postVideo));
+postVideo.addEventListener('change',()=>selectAttachment(postVideo,postImage));
+
+async function responseData(r){
+  try{return await r.json();}
+  catch(e){throw new Error('Server returned an unreadable response (HTTP '+r.status+'). Try again.');}
+}
+async function publishPost(){
+  if(publishing||!PASS)return;
+  const text=postText.value.trim();
+  if(!text){publishMessage('Write some text before publishing.',false);return;}
+  if(postText.value.length>2500){publishMessage('Post text must be 2500 characters or fewer.',false);return;}
+  const image=postImage.files[0],video=postVideo.files[0];
+  const error=attachmentError(image,video);
+  if(error){publishMessage(error,false);return;}
+  const version=authVersion;
+  publishing=true;updateComposer();
+  document.getElementById('composerFields').disabled=true;
+  document.getElementById('publishBtn').textContent='Publishing…';
+  publishMessage('',false);
+  try{
+    const fd=new FormData();fd.append('text',text);fd.append('mood',document.getElementById('postMood').value);
+    if(image)fd.append('image',image);
+    if(video)fd.append('video',video);
+    const r=await fetch('/api/chat/admin/posts',{method:'POST',headers:hdr(),body:fd});
+    if(version!==authVersion)return;
+    if(r.status===401){logout();return;}
+    const d=await responseData(r);
+    if(version!==authVersion)return;
+    if(!r.ok||!d.success)throw new Error(d.message||'Could not publish post (HTTP '+r.status+'). Try again.');
+    document.getElementById('postComposer').reset();clearAttachment();
+    publishMessage('Published! Your highlighted, pinned admin post is now live on /chat.',true);
+    loadQueue();
+  }catch(e){if(version===authVersion)publishMessage(e.name==='TypeError'?'Cannot reach server. Check your connection and try again.':e.message||'Could not publish the post. Try again.',false);}
+  finally{
+    if(version===authVersion){
+      publishing=false;document.getElementById('composerFields').disabled=false;
+      document.getElementById('publishBtn').textContent='Publish pinned post';updateComposer();
+    }
+  }
+}
 
 async function login(){
   const p=document.getElementById('pass').value;
@@ -71,27 +196,48 @@ async function login(){
   try{
     const r=await fetch('/api/chat/admin/login',{method:'POST',headers:{'x-admin-password':p}});
     const d=await r.json();
-    if(d.success){PASS=p;show();}
+    if(r.ok&&d.success){PASS=p;authVersion++;show();}
     else{err.style.display='block';err.textContent=d.message||'Wrong password.';}
   }catch(e){err.style.display='block';err.textContent='Cannot reach server.';}
   btn.disabled=false;
 }
-function logout(){PASS='';
+function cleanupQueue(){
+  queueVersion++;
+  if(queueController){queueController.abort();queueController=null;}
+  document.querySelectorAll('#queue .pvideo').forEach(video=>{video.pause();video.removeAttribute('src');video.load();});
+  mediaUrls.forEach(url=>URL.revokeObjectURL(url));mediaUrls.clear();
+}
+function logout(){PASS='';authVersion++;cleanupQueue();
+  document.getElementById('queue').innerHTML='';
+  document.getElementById('pass').value='';
+  document.getElementById('postComposer').reset();publishing=false;
+  document.getElementById('composerFields').disabled=false;
+  document.getElementById('publishBtn').textContent='Publish pinned post';
+  clearAttachment();publishMessage('',false);
   document.getElementById('adminView').style.display='none';document.getElementById('loginView').style.display='block';}
 function show(){document.getElementById('loginView').style.display='none';
   document.getElementById('adminView').style.display='block';loadQueue();}
 
 async function loadQueue(){
+  cleanupQueue();
+  if(!PASS)return;
+  const version=queueVersion;
+  queueController=new AbortController();
+  const signal=queueController.signal;
   const q=document.getElementById('queue');
   q.innerHTML='<div class="empty">Loading…</div>';
   try{
     // Fetch posts queue and comments queue in parallel
     const [rPosts, rComments] = await Promise.all([
-      fetch('/api/chat/admin/queue',{headers:hdr()}),
-      fetch('/api/chat/admin/comments-queue',{headers:hdr()})
+      fetch('/api/chat/admin/queue',{headers:hdr(),signal}),
+      fetch('/api/chat/admin/comments-queue',{headers:hdr(),signal})
     ]);
+    if(version!==queueVersion)return;
     if(rPosts.status===401||rComments.status===401){logout();return;}
-    const [dPosts, dComments] = await Promise.all([rPosts.json(), rComments.json()]);
+    const [dPosts, dComments] = await Promise.all([responseData(rPosts), responseData(rComments)]);
+    if(version!==queueVersion)return;
+    if(!rPosts.ok||dPosts.success===false)throw new Error(dPosts.message||'Could not load posts (HTTP '+rPosts.status+').');
+    if(!rComments.ok||dComments.success===false)throw new Error(dComments.message||'Could not load comments (HTTP '+rComments.status+').');
 
     const posts = dPosts.posts || [];
     const comments = dComments.comments || [];
@@ -107,15 +253,19 @@ async function loadQueue(){
       html+='<h2>Posts</h2>';
       html+=posts.map(p=>{
         const isReported=p.status==='approved'&&p.reported;
-        return `<div class="card">
-          <span class="tag ${isReported?'reported':'pending'}">${isReported?'⚑ Reported · #'+p.post_number:'Pending approval'}</span>
+        const isPinned=p.is_admin_post&&p.is_pinned;
+        return `<div class="card${isPinned?' admin-post':''}">
+          <span class="tag ${isPinned?'pinned':isReported?'reported':'pending'}">${isPinned?'Admin · Pinned':isReported?'⚑ Reported · #'+p.post_number:'Pending approval'}</span>
+          ${isPinned&&isReported?'<span class="tag reported">⚑ Reported</span>':''}
           <div class="ptext">${esc(p.text)}</div>
           <span class="mood">${esc(p.mood||'Other / Casual')}</span>
-          ${p.has_image?`<img class="pimg" src="/api/chat/image/${p.id}" onerror="this.remove()">`:''}
-          ${p.has_video?`<video class="pvideo" controls playsinline preload="metadata" src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}" onerror="this.remove()"></video>`:''}
+          ${p.has_image?`<img class="pimg" hidden alt="Post attachment" data-src="/api/chat/image/${p.id}"><div class="media-status" role="status">Loading image…</div>`:''}
+          ${p.has_video?`<video class="pvideo" hidden controls playsinline preload="metadata" data-src="/api/chat/stream/${encodeURIComponent(p.video_file_id)}"></video><div class="media-status" role="status">Loading video…</div>`:''}
           <div class="pdate">${fmtDate(p.created_at)}</div>
           <div class="row">
-            ${isReported
+            ${isPinned
+              ?`${isReported?`<button class="act keep" onclick="act('unflag',${p.id})">Keep post</button>`:''}<button class="act reject" onclick="act('reject',${p.id},true)">Remove post</button>`
+              :isReported
               ?`<button class="act keep" onclick="act('unflag',${p.id})">Keep post</button>
                 <button class="act reject" onclick="act('reject',${p.id},true)">Delete post</button>`
               :`<button class="act approve" onclick="act('approve',${p.id})">Approve</button>
@@ -141,34 +291,66 @@ async function loadQueue(){
 
     q.innerHTML=html;
 
-    // Admin needs the password header to view pending images
-    document.querySelectorAll('.pimg').forEach(async img=>{
-      try{const r=await fetch(img.getAttribute('src'),{headers:hdr()});
-        if(r.ok){img.src=URL.createObjectURL(await r.blob());}else{img.remove();}}catch(e){img.remove();}
-    });
-    document.querySelectorAll('.pvideo').forEach(async video=>{
-      try{const r=await fetch(video.getAttribute('src'),{headers:hdr()});
-        if(r.ok){video.src=URL.createObjectURL(await r.blob());}else{video.remove();}}catch(e){video.remove();}
-    });
-  }catch(e){q.innerHTML='<div class="empty">Could not load queue.</div>';}
+    // Never load pending media without the password header.
+    q.querySelectorAll('[data-src]').forEach(media=>loadMedia(media,version,signal));
+  }catch(e){
+    if(version===queueVersion&&!signal.aborted)q.innerHTML='<div class="empty">'+esc(e.name==='TypeError'?'Cannot reach server. Check your connection and reload the queue.':e.message||'Could not load queue. Try again.')+'</div>';
+  }
+}
+
+async function loadMedia(media,version,signal){
+  const type=media.tagName==='VIDEO'?'video':'image';
+  const status=media.nextElementSibling;
+  let url='';
+  function showError(message){
+    media.hidden=true;status.hidden=false;status.className='media-status error';status.textContent=message;
+    if(url){URL.revokeObjectURL(url);mediaUrls.delete(url);url='';}
+  }
+  try{
+    const r=await fetch(media.dataset.src,{headers:hdr(),signal});
+    if(version!==queueVersion||!media.isConnected)return;
+    if(r.status===401){logout();return;}
+    if(!r.ok)throw new Error(r.status===404?'This '+type+' is no longer available.':'Could not load '+type+' (HTTP '+r.status+'). Reload the queue to try again.');
+    const blob=await r.blob();
+    if(version!==queueVersion||!media.isConnected||signal.aborted)return;
+    if(!blob.size)throw new Error('The '+type+' attachment is empty or unavailable.');
+    url=URL.createObjectURL(blob);mediaUrls.add(url);
+    media.onerror=()=>{
+      if(version===queueVersion&&media.isConnected)showError('Could not display this '+type+'. The file may be damaged or unsupported. Reload the queue to try again.');
+    };
+    media[type==='video'?'onloadedmetadata':'onload']=()=>{if(version===queueVersion)status.hidden=true;};
+    media.hidden=false;media.src=url;
+  }catch(e){
+    if(version===queueVersion&&!signal.aborted&&media.isConnected)showError(e.name==='TypeError'?'Cannot reach the server to load this '+type+'. Check your connection and reload the queue.':e.message||'Could not load this '+type+'. Try reloading the queue.');
+  }
 }
 
 async function act(kind,id,confirmIt){
   if(confirmIt&&!confirm('Permanently delete this post and its media? This cannot be undone.'))return;
+  const version=authVersion;
   try{
     const r=await fetch('/api/chat/admin/'+kind+'/'+id,{method:'POST',headers:hdr()});
+    if(version!==authVersion)return;
     if(r.status===401){logout();return;}
-    await r.json();loadQueue();
-  }catch(e){alert('Action failed. Try again.');}
+    const d=await responseData(r);
+    if(version!==authVersion)return;
+    if(!r.ok||!d.success)throw new Error(d.message||'Post action failed (HTTP '+r.status+'). Try again.');
+    loadQueue();
+  }catch(e){if(version===authVersion)alert(e.message||'Action failed. Try again.');}
 }
 
 async function actComment(kind,id,confirmIt){
   if(confirmIt&&!confirm('Reject and delete this comment? This cannot be undone.'))return;
+  const version=authVersion;
   try{
     const r=await fetch('/api/chat/admin/'+kind+'/'+id,{method:'POST',headers:hdr()});
+    if(version!==authVersion)return;
     if(r.status===401){logout();return;}
-    await r.json();loadQueue();
-  }catch(e){alert('Action failed. Try again.');}
+    const d=await responseData(r);
+    if(version!==authVersion)return;
+    if(!r.ok||!d.success)throw new Error(d.message||'Comment action failed (HTTP '+r.status+'). Try again.');
+    loadQueue();
+  }catch(e){if(version===authVersion)alert(e.message||'Action failed. Try again.');}
 }
 </script>
 </body>
