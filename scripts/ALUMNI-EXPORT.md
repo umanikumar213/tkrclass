@@ -39,7 +39,7 @@ The default portal URL comes from the existing app. It uses HTTP, which does not
 node scripts/export-alumni.js --rolls generated-artifacts/rolls.txt --base-url https://COLLEGE-HOST/TKRCET/
 ```
 
-Only use `--allow-http` on the trusted college network if HTTP is the college-approved option. Same-origin redirects are allowed; redirects to other hosts are rejected. No captcha bypass, proxy rotation, credential guessing, or automatic login retries.
+Only use `--allow-http` on the trusted college network if HTTP is the college-approved option. Same-origin redirects are allowed; redirects to other hosts are rejected. No captcha bypass, proxy rotation, or credential guessing. Only temporary connection failures and HTTP 500/502/503/504 responses get one fresh-session retry after 60 seconds.
 
 ## Output and resume
 
@@ -48,13 +48,14 @@ Default output directory: `generated-artifacts/alumni/`
 - `students.csv`: Excel-compatible CSV with **name, roll_number, course, section, year**.
 - `students.json`: the same five fields, used as the resume checkpoint.
 - `skipped-rolls.json`: roll numbers where the portal explicitly returned **Invalid Details**, with that reason. These are skipped automatically on resume too.
+- `network-failures.json`: entries that failed both the initial attempt and the 60-second retry. They are skipped for the current run, but automatically tried again when you rerun the same command. Resolved entries are removed from this log.
 - `needs-review.json`: a partial record and missing field names, only if a profile lacks required details.
 
 The script does not download photos, contact details, attendance, or raw HTML files. It must read the existing student page in memory to extract the allowed fields. Values are read from labeled portal fields, never inferred from the roll number. The course field accepts portal labels such as Course, Programme, or Branch; confirm the college's wording using the first exported record.
 
 Rerun the same command to skip completed students and previously recorded Invalid Details entries. Keep the same output directory for the same alumni export only. To retry a skipped roll after the college corrects it, close the script, back up `skipped-rolls.json`, and remove only that entry using a JSON-aware editor.
 
-There is one student login at a time, a 10-second pause between students (including skipped entries), and at least 2 seconds between HTTP requests. Large exports can take several hours. Ctrl+C requests a stop after the current student is saved. Explicit **Invalid Details** responses are logged and skipped after one attempt. Other rejected logins, network failures, 401/403/429 responses, mismatched profiles, captcha/verification pages, and missing fields stop the run. Resolve the cause with the college before resuming.
+There is one student login at a time, a 10-second pause between students (including skipped entries), and at least 2 seconds between HTTP requests. Large exports can take several hours. Ctrl+C requests a stop after the current student is saved; during the retry countdown, it cancels the retry. Explicit **Invalid Details** responses are logged and skipped immediately. Temporary Wi-Fi/DNS/connection/timeouts and HTTP 500/502/503/504 failures wait **60 seconds**, then retry that student once in a fresh session. A second temporary failure is logged and the run moves to the next student. Other rejected logins, redirect errors, 401/403/429 responses, mismatched profiles, captcha/verification pages, and missing fields still stop the run. Resolve those causes with the college before resuming. A prolonged Wi-Fi outage may leave many students uncollected; check the final warning and `network-failures.json`, then rerun when your connection is stable.
 
 If the current student page does not show course, section, or year, the script stops rather than guessing. Get a redacted HTML example of the approved profile page (remove all personal data, credentials, and session values) so the parser can be adapted.
 

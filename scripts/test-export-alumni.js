@@ -4,7 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { readRolls, parseProfile, collectStudent, options, runExport } = require('./export-alumni');
+const { readRolls, parseProfile, collectStudent, collectWithRetry, options, runExport } = require('./export-alumni');
 
 async function main() {
   const roll = '99K91A0001'; // synthetic fixture
@@ -45,8 +45,12 @@ async function main() {
   let mode = 'success';
   let logins = 0;
   let photos = 0;
+  let networkDrops = 0;
+  let loginPageRequests = 0;
   const server = http.createServer(async (req, res) => {
     if (req.url === '/portal/' && req.method === 'GET') {
+      loginPageRequests++;
+      if (networkDrops > 0) { networkDrops--; req.socket.destroy(); return; }
       if (mode === 'blocked') { res.writeHead(429); res.end('Slow down'); return; }
       res.end('<form action="login" method="post"><input name="username"><input name="password" type="password"><input type="hidden" name="csrf" value="fixture"></form>');
     } else if (req.url === '/portal/login') {
@@ -120,7 +124,32 @@ async function main() {
     assert.ok(refreshedCsv.includes('"IV"'));
     mode = 'blocked';
     await assert.rejects(runExport(['99K91A0003'], { ...config, output, delay: 0 }), /HTTP 429/);
-    console.log('PASS: explicit profile values override headings; bad checkpoint backup/repair; CSV lock recovery; five-field export; skip/resume; blocking safeguards.');
+    mode = 'success';
+    networkDrops = 1;
+    let requestsBefore = loginPageRequests;
+    assert.deepEqual(await collectWithRetry(roll, { ...config, retryDelay: 0 }), parsed);
+    assert.equal(loginPageRequests - requestsBefore, 2);
+    mode = 'invalid';
+    requestsBefore = loginPageRequests;
+    await assert.rejects(collectWithRetry(roll, { ...config, retryDelay: 0 }), { code: 'INVALID_DETAILS' });
+    assert.equal(loginPageRequests - requestsBefore, 1);
+    mode = 'blocked';
+    requestsBefore = loginPageRequests;
+    await assert.rejects(collectWithRetry(roll, { ...config, retryDelay: 0 }), /HTTP 429/);
+    assert.equal(loginPageRequests - requestsBefore, 1);
+    mode = 'success';
+    networkDrops = 2;
+    const retryOutput = path.join(output, 'network-retry-test');
+    await runExport(['99K91A0002', roll], { ...config, output: retryOutput, delay: 0, retryDelay: 0 });
+    let failures = JSON.parse(await fs.readFile(path.join(retryOutput, 'network-failures.json'), 'utf8'));
+    assert.equal(failures[0].roll_number, '99K91A0002');
+    assert.equal(failures[0].attempts, 2);
+    assert.equal(JSON.parse(await fs.readFile(path.join(retryOutput, 'students.json'), 'utf8'))[0].roll_number, roll);
+    mode = 'mixed';
+    await runExport(['99K91A0002', roll], { ...config, output: retryOutput, delay: 0, retryDelay: 0 });
+    failures = JSON.parse(await fs.readFile(path.join(retryOutput, 'network-failures.json'), 'utf8'));
+    assert.deepEqual(failures, []);
+    console.log('PASS: network retry recovery; exhausted retry logs and continues; network failures revisited on resume; no retry on Invalid Details or blocking; profile repair; CSV lock recovery.');
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));

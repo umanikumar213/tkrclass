@@ -139,10 +139,25 @@ async function collectStudent(roll, config) {
         ...(referer ? { Referer: referer } : {}),
         ...(data ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
       } });
-    } catch {
-      throw new Error('Network, timeout, or redirect error. Progress saved; check access before resuming.');
+    } catch (cause) {
+      const temporaryCodes = new Set([
+        'ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED',
+        'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'EPIPE', 'ERR_NETWORK',
+      ]);
+      const error = new Error('Network, timeout, or redirect error. Progress saved; check access before resuming.');
+      // Redirect/security/configuration errors must never be treated as Wi-Fi failures.
+      if (temporaryCodes.has(cause.code) || temporaryCodes.has(cause.cause?.code)) {
+        error.code = 'TEMPORARY_NETWORK';
+        error.message = 'Temporary connection or timeout failure.';
+      }
+      throw error;
     }
     if ([401, 403, 429].includes(response.status)) throw new Error(`Portal returned HTTP ${response.status}. Stopped; do not bypass access controls or throttling.`);
+    if ([500, 502, 503, 504].includes(response.status)) {
+      const error = new Error(`Temporary portal failure (HTTP ${response.status}).`);
+      error.code = 'TEMPORARY_NETWORK';
+      throw error;
+    }
     if (response.status < 200 || response.status >= 300) throw new Error(`Portal returned HTTP ${response.status}. Stopped without retrying.`);
     const html = String(response.data);
     if (/captcha|g-recaptcha|h-captcha|too many requests|account.{0,20}locked/i.test(html)) throw new Error('Portal requires verification or has blocked access. Stopped without bypassing it.');
@@ -164,7 +179,7 @@ async function collectStudent(roll, config) {
   form.find('button[type="submit"][name]').each((_, el) => { payload[$(el).attr('name')] = $(el).attr('value') || ''; });
   if (!username || !password) throw new Error('Login fields not recognized. No credentials submitted.');
   // Matches the existing college login flow: roll number as username AND password.
-  // There is no password guessing, fallback credential list, or automatic retry.
+  // No password guessing or fallback credentials. Only temporary transport failures can retry.
   let page = await request('post', safeUrl(form.attr('action') || login.url, login.url), new URLSearchParams(payload).toString(), login.url);
   for (let i = 0; i < 4; i++) {
     if (/\binvalid\s+details\b/i.test(page.html)) {
@@ -182,6 +197,22 @@ async function collectStudent(roll, config) {
   if (/<input[^>]+type\s*=\s*["']password["']/i.test(page.html)) throw new Error('Portal still shows a login form. Stopped after one attempt.');
   const profile = await request('get', safeUrl('StudentInformationForStudent.php'), null, page.url);
   return parseProfile(profile.html, roll);
+}
+
+async function collectWithRetry(roll, config, shouldStop = () => false) {
+  try {
+    return await collectStudent(roll, config);
+  } catch (error) {
+    if (error.code !== 'TEMPORARY_NETWORK') throw error;
+    const waitMs = config.retryDelay ?? 60000;
+    console.warn(`${error.message} Waiting ${waitMs / 1000} seconds before one retry…`);
+    const until = Date.now() + waitMs;
+    while (!shouldStop() && Date.now() < until) await sleep(Math.min(1000, until - Date.now()));
+    if (shouldStop()) return null;
+    console.log('Retrying the same input entry (attempt 2 of 2)…');
+    // Fresh cookies and login form after reconnecting; never reuse a partial session.
+    return collectStudent(roll, config);
+  }
 }
 
 const csvCell = value => `"${String(value).replace(/^[=+@\t\r-]/, "'$&").replace(/"/g, '""')}"`;
@@ -241,10 +272,21 @@ async function runExport(rolls, config) {
     skipped = JSON.parse(await fs.readFile(skippedFile, 'utf8'));
     if (!Array.isArray(skipped) || skipped.some(row => typeof row.roll_number !== 'string' || row.reason !== 'Invalid Details')) throw new Error('Invalid skip log.');
   } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read skipped-rolls.json; preserve it and choose a new --output directory.'); }
+  const networkFile = path.join(output, 'network-failures.json');
+  let networkFailures = [];
+  try {
+    networkFailures = JSON.parse(await fs.readFile(networkFile, 'utf8'));
+    if (!Array.isArray(networkFailures) || networkFailures.some(row => typeof row.roll_number !== 'string')) throw new Error('Invalid network log.');
+  } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read network-failures.json; preserve it and choose a new --output directory.'); }
+  async function clearNetworkFailure(roll) {
+    if (!networkFailures.some(row => row.roll_number === roll)) return;
+    networkFailures = networkFailures.filter(row => row.roll_number !== roll);
+    await writePrivate(networkFile, JSON.stringify(networkFailures, null, 2));
+  }
   const completed = new Set(rows.map(row => row.roll_number));
   const skippedRolls = new Set(skipped.map(row => row.roll_number));
   await syncCsv(); // Rebuild even when all input entries have already been handled.
-  console.log(`${rolls.length} unique input entries; ${rolls.filter(roll => completed.has(roll)).length} already exported; ${rolls.filter(roll => skippedRolls.has(roll)).length} previously skipped. Sequential mode; no automatic retries.`);
+  console.log(`${rolls.length} unique input entries; ${rolls.filter(roll => completed.has(roll)).length} already exported; ${rolls.filter(roll => skippedRolls.has(roll)).length} previously skipped. Temporary network failures get one retry after 60 seconds.`);
   let stopping = false;
   const stop = () => { stopping = true; console.log('Stopping after the current student is saved.'); };
   process.once('SIGINT', stop);
@@ -256,12 +298,22 @@ async function runExport(rolls, config) {
     console.log(`Processing input entry ${index + 1}/${rolls.length}…`);
     let row;
     try {
-      row = await collectStudent(roll, config);
+      row = await collectWithRetry(roll, config, () => stopping);
+      if (!row) break;
     } catch (error) {
+      if (error.code === 'TEMPORARY_NETWORK') {
+        networkFailures = networkFailures.filter(entry => entry.roll_number !== roll);
+        networkFailures.push({ roll_number: roll, reason: error.message, attempts: 2 });
+        await writePrivate(networkFile, JSON.stringify(networkFailures, null, 2));
+        console.warn(`Input entry ${index + 1} failed again. Recorded in network-failures.json; moving to the next entry.`);
+        if (!stopping && index < rolls.length - 1) await sleep(config.delay);
+        continue;
+      }
       if (error.code !== 'INVALID_DETAILS') throw error;
       skipped.push({ roll_number: roll, reason: 'Invalid Details' });
       await writePrivate(skippedFile, JSON.stringify(skipped, null, 2));
       skippedRolls.add(roll);
+      await clearNetworkFailure(roll);
       console.log(`Skipped input entry ${index + 1}: Invalid Details. Recorded in skipped-rolls.json.`);
       if (!stopping && index < rolls.length - 1) await sleep(config.delay);
       continue;
@@ -274,6 +326,7 @@ async function runExport(rolls, config) {
     rows.push(row);
     // JSON is the canonical checkpoint; CSV is rebuilt from it, also on resume.
     await writePrivate(checkpoint, JSON.stringify(rows, null, 2));
+    await clearNetworkFailure(roll);
     await syncCsv();
     completed.add(roll);
     if (!stopping && index < rolls.length - 1) await sleep(config.delay);
@@ -281,10 +334,12 @@ async function runExport(rolls, config) {
   await syncCsv();
   console.log(`Saved ${rows.length} profiles to the private output directory. Keep exports out of Git and the public website.`);
   if (csvLocked) console.warn('students.json is current, but students.csv is not. Close Excel and rerun to refresh the CSV.');
+  const unresolved = networkFailures.filter(row => rolls.includes(row.roll_number) && !completed.has(row.roll_number) && !skippedRolls.has(row.roll_number)).length;
+  if (unresolved) console.warn(`${unresolved} entries remain uncollected due to network failures. See network-failures.json. Rerun the same command to try them again.`);
   } finally {
     process.removeListener('SIGINT', stop);
   }
 }
 
-module.exports = { readRolls, parseProfile, collectStudent, options, runExport };
+module.exports = { readRolls, parseProfile, collectStudent, collectWithRetry, options, runExport };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
