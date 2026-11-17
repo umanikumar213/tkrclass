@@ -31,6 +31,17 @@ async function main() {
   const missing = parseProfile(`<body>Name: Test Student\nRoll No: ${roll}\n</body>`, roll);
   assert.equal(missing.section, '');
   assert.equal(missing.course, '');
+  const inlineProfile = `<body><table><tr><td>Section</td><td>Status</td><td>Year</td><td>Semester</td></tr></table>
+    <div><b>Roll No:</b> ${roll} <b>Name:</b> Test Student <b>Father Name:</b> Do not export</div>
+    <div><b>Course:</b> B.Tech. (CD) <b>Year:</b> B.Tech. V Semester (R22) <b>Section:</b> C</div></body>`;
+  const profileValues = parseProfile(inlineProfile, roll);
+  assert.equal(profileValues.section, 'C');
+  assert.equal(profileValues.year, 'B.Tech. V Semester (R22)');
+  assert.equal(profileValues.course, 'B.Tech. (CD)');
+  assert.equal(profileValues.name, 'Test Student');
+  const headingsOnly = parseProfile(`<body>Roll No: ${roll}\n<table><tr><td>Section</td><td>Status</td><td>Year</td><td>Semester</td></tr></table></body>`, roll);
+  assert.equal(headingsOnly.section, '');
+  assert.equal(headingsOnly.year, '');
   let mode = 'success';
   let logins = 0;
   let photos = 0;
@@ -83,9 +94,33 @@ async function main() {
     const beforeResume = logins;
     await runExport(['99K91A0002', roll], { ...config, output, delay: 0 });
     assert.equal(logins, beforeResume);
+    // Simulate the old bad checkpoint and a Windows CSV lock without student portal traffic.
+    const damaged = { ...parsed, section: 'Status', year: 'Semester' };
+    await fs.writeFile(path.join(output, 'students.json'), JSON.stringify([damaged]));
+    const realRename = fs.rename;
+    try {
+      fs.rename = async (from, to) => {
+        if (to.endsWith('students.csv')) {
+          const error = new Error('Simulated Windows Excel lock');
+          error.code = 'EPERM'; throw error;
+        }
+        return realRename(from, to);
+      };
+      await runExport([roll], { ...config, output, delay: 0 });
+      const repaired = JSON.parse(await fs.readFile(path.join(output, 'students.json'), 'utf8'));
+      assert.equal(repaired[0].section, 'A');
+      assert.equal(repaired[0].year, 'IV');
+      assert.ok((await fs.readdir(output)).some(file => file.startsWith('students-before-repair-')));
+    } finally { fs.rename = realRename; }
+    const beforeCsvRebuild = logins;
+    await runExport([roll], { ...config, output, delay: 0 });
+    assert.equal(logins, beforeCsvRebuild);
+    const refreshedCsv = await fs.readFile(path.join(output, 'students.csv'), 'utf8');
+    assert.ok(!refreshedCsv.includes('Status'));
+    assert.ok(refreshedCsv.includes('"IV"'));
     mode = 'blocked';
     await assert.rejects(runExport(['99K91A0003'], { ...config, output, delay: 0 }), /HTTP 429/);
-    console.log('PASS: parsing, five-field export, local login, Invalid Details skip and continue, skip persistence, resume without extra logins, blocking stop, and HTTP safeguard.');
+    console.log('PASS: explicit profile values override headings; bad checkpoint backup/repair; CSV lock recovery; five-field export; skip/resume; blocking safeguards.');
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));

@@ -48,11 +48,22 @@ function parseProfile(html, expectedRoll) {
   const $ = cheerio.load(html);
   $('script,style,noscript').remove();
   const result = Object.fromEntries(FIELDS.map(field => [field, '']));
+  const headings = /^(status|semester|section|year|course|branch|name|roll no|roll number|attendance|s\.?no\.?)[:.]?$/i;
   // Read only labeled values. Do not collect photos, attendance or contact details.
   function setValue(field, value) {
     const text = clean(value).replace(/^[:：]\s*/, '');
-    if (field && text && !labelField(text) && !result[field]) result[field] = text;
+    if (field && text && !labelField(text) && !headings.test(text) && !result[field]) result[field] = text;
   }
+  // Prefer explicitly labeled profile text over unrelated table column headings.
+  // Keep DOM boundaries so </td><td> and <br> do not concatenate label/value pairs.
+  const profile = $.root().clone();
+  profile.find('br').replaceWith('\n');
+  profile.find('td,th,div,p,tr,dt,dd').append('\n');
+  const labels = Object.values(ALIASES).flat().sort((a, b) => b.length - a.length);
+  const escaped = labels.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const bodyText = profile.text().replace(/\r/g, '');
+  const regex = new RegExp(`(?:^|[\\s])(${escaped})\\s*[:：]\\s*([^\\n]*?)(?=\\s+(?:${escaped}|father(?:'s)? name|mother(?:'s)? name|gender|date of birth|semester|mobile|email)\\s*[:：]|\\n|$)`, 'gi');
+  for (const match of bodyText.matchAll(regex)) setValue(labelField(match[1]), match[2]);
   $('tr').each((_, tr) => {
     const cells = $(tr).children('td,th');
     cells.each((index, cell) => {
@@ -74,12 +85,6 @@ function parseProfile(html, expectedRoll) {
     const field = labelField($(el).text());
     if (field) setValue(field, $(el).next().text());
   });
-  // Support older pages with all labeled values in one line.
-  const labels = Object.values(ALIASES).flat().sort((a, b) => b.length - a.length);
-  const escaped = labels.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-  const bodyText = $('body').text().replace(/\r/g, '');
-  const regex = new RegExp(`(?:^|[\\s])(${escaped})\\s*[:：]\\s*([^\\n]*?)(?=\\s+(?:${escaped}|father(?:'s)? name|mother(?:'s)? name|gender|date of birth|semester|mobile|email)\\s*[:：]|\\n|$)`, 'gi');
-  for (const match of bodyText.matchAll(regex)) setValue(labelField(match[1]), match[2]);
   result.roll_number = result.roll_number.toUpperCase();
   if (result.roll_number !== expectedRoll.toUpperCase()) throw new Error('Returned profile does not match the requested roll number. Stopped to avoid mixing records.');
   return result;
@@ -203,11 +208,33 @@ async function runExport(rolls, config) {
   if (output === path.resolve('public') || output.startsWith(path.resolve('public') + path.sep)) throw new Error('Do not store student exports in the public web directory.');
   await fs.mkdir(output, { recursive: true, mode: 0o700 });
   const checkpoint = path.join(output, 'students.json');
+  let csvLocked = false;
+  async function syncCsv() {
+    try {
+      await writePrivate(path.join(output, 'students.csv'), '\uFEFF' + [FIELDS, ...rows.map(row => FIELDS.map(field => row[field]))].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n');
+      csvLocked = false;
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+      if (!csvLocked) console.warn('CSV is locked or not writable (often open in Excel). Collection continues in students.json. Close Excel; rerun this command afterward to rebuild the CSV.');
+      csvLocked = true;
+    }
+  }
   let rows = [];
   try {
     rows = JSON.parse(await fs.readFile(checkpoint, 'utf8'));
     if (!Array.isArray(rows) || rows.some(row => FIELDS.some(field => typeof row[field] !== 'string'))) throw new Error('Invalid checkpoint.');
   } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read checkpoint; preserve it and choose a new --output directory.'); }
+  // Old parser versions could save attendance column headings as profile values.
+  // Preserve those records in a backup and re-fetch only affected entries in this input list.
+  const needsRepair = row => /^(status|semester)$/i.test(clean(row.section))
+    || /^(status|semester)$/i.test(clean(row.year));
+  const damaged = rows.filter(row => needsRepair(row) && rolls.includes(row.roll_number));
+  if (damaged.length) {
+    await writePrivate(path.join(output, `students-before-repair-${Date.now()}.json`), JSON.stringify(rows, null, 2));
+    rows = rows.filter(row => !damaged.includes(row));
+    await writePrivate(checkpoint, JSON.stringify(rows, null, 2));
+    console.log(`Backed up checkpoint; ${damaged.length} records with heading values will be collected again.`);
+  }
   const skippedFile = path.join(output, 'skipped-rolls.json');
   let skipped = [];
   try {
@@ -216,6 +243,7 @@ async function runExport(rolls, config) {
   } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read skipped-rolls.json; preserve it and choose a new --output directory.'); }
   const completed = new Set(rows.map(row => row.roll_number));
   const skippedRolls = new Set(skipped.map(row => row.roll_number));
+  await syncCsv(); // Rebuild even when all input entries have already been handled.
   console.log(`${rolls.length} unique input entries; ${rolls.filter(roll => completed.has(roll)).length} already exported; ${rolls.filter(roll => skippedRolls.has(roll)).length} previously skipped. Sequential mode; no automatic retries.`);
   let stopping = false;
   const stop = () => { stopping = true; console.log('Stopping after the current student is saved.'); };
@@ -246,12 +274,13 @@ async function runExport(rolls, config) {
     rows.push(row);
     // JSON is the canonical checkpoint; CSV is rebuilt from it, also on resume.
     await writePrivate(checkpoint, JSON.stringify(rows, null, 2));
-    await writePrivate(path.join(output, 'students.csv'), '\uFEFF' + [FIELDS, ...rows.map(row => FIELDS.map(field => row[field]))].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n');
+    await syncCsv();
     completed.add(roll);
     if (!stopping && index < rolls.length - 1) await sleep(config.delay);
   }
-  await writePrivate(path.join(output, 'students.csv'), '\uFEFF' + [FIELDS, ...rows.map(row => FIELDS.map(field => row[field]))].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n');
+  await syncCsv();
   console.log(`Saved ${rows.length} profiles to the private output directory. Keep exports out of Git and the public website.`);
+  if (csvLocked) console.warn('students.json is current, but students.csv is not. Close Excel and rerun to refresh the CSV.');
   } finally {
     process.removeListener('SIGINT', stop);
   }

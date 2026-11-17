@@ -109,4 +109,10 @@ You do not need to start the website, install PostgreSQL, or copy any deployment
 
 If Windows says `node is not recognized`, reopen Command Prompt after installation. If `Cannot find module` appears, run the dependency installation command from `C:\AlumniExport` again. If the script cannot find `rolls.txt`, check the filename and that Command Prompt is open in the correct folder.
 
+### Excel locks and repairing old exports
+
+Close `students.csv` in Excel while collecting. If Windows blocks replacing it (`EPERM`, `EACCES`, or `EBUSY`), the updated script continues saving the canonical `students.json` and warns that the CSV is stale. Close Excel, then rerun the same command to rebuild the CSV from saved JSON without repeating completed logins.
+
+Older script versions could mistake attendance-table headings for profile values, saving Section=`Status` or Year=`Semester`. The updated script detects these exact placeholder values for rolls in your current input list, backs up the original checkpoint as `students-before-repair-<timestamp>.json`, and re-collects the affected records. Keep your original full input list to repair all affected entries. Do not delete the output folder or checkpoint. Check one corrected export before continuing a full batch; if fields remain missing, stop and provide a redacted HTML example of the profile header.
+
 On Windows, protect the export folder with your account's file permissions; Unix file-mode settings alone do not secure Windows files. Do not share the folder publicly or copy it into the website's `public` folder.
