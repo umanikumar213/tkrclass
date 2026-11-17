@@ -24,7 +24,13 @@ async function main() {
   assert.equal(expanded[359], '99K91A00Z9');
   assert.equal(readRolls('99K91A00\n98K91A00').length, 720);
   assert.throws(() => readRolls('99K91A000'));
-  assert.throws(() => options(['--delay-ms', '1']));
+  assert.equal(options([]).delay, 0);
+  assert.equal(options([]).requestDelay, 2000);
+  assert.equal(options(['--delay-ms', '0']).delay, 0);
+  assert.equal(options(['--delay-ms', '10000']).delay, 10000);
+  assert.throws(() => options(['--delay-ms', '-1']));
+  assert.throws(() => options(['--delay-ms', 'NaN']));
+  assert.throws(() => options(['--request-delay-ms', '0']));
   const parsed = parseProfile(html, roll);
   assert.deepEqual(parsed, { name: 'Test Student', roll_number: roll, course: 'B.Tech', section: 'A', year: 'IV' });
   assert.throws(() => parseProfile(html, '99K91A0002'), /does not match/);

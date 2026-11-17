@@ -55,7 +55,7 @@ The script does not download photos, contact details, attendance, or raw HTML fi
 
 Rerun the same command to skip completed students and previously recorded Invalid Details entries. Keep the same output directory for the same alumni export only. To retry a skipped roll after the college corrects it, close the script, back up `skipped-rolls.json`, and remove only that entry using a JSON-aware editor.
 
-There is one student login at a time, a 10-second pause between students (including skipped entries), and at least 2 seconds between HTTP requests. Large exports can take several hours. Ctrl+C requests a stop after the current student is saved; during the retry countdown, it cancels the retry. Explicit **Invalid Details** responses are logged and skipped immediately. Temporary Wi-Fi/DNS/connection/timeouts and HTTP 500/502/503/504 failures wait **60 seconds**, then retry that student once in a fresh session. A second temporary failure is logged and the run moves to the next student. Other rejected logins, redirect errors, 401/403/429 responses, mismatched profiles, captcha/verification pages, and missing fields still stop the run. Resolve those causes with the college before resuming. A prolonged Wi-Fi outage may leave many students uncollected; check the final warning and `network-failures.json`, then rerun when your connection is stable.
+There is one student login at a time and **no added pause between students**, including skipped entries. Requests within each student's login/data-collection session remain spaced at least 2 seconds apart by default. Large exports can still take hours depending on portal response times. Ctrl+C requests a stop after the current student is saved; during the retry countdown, it cancels the retry. Explicit **Invalid Details** responses are logged and skipped immediately. Temporary Wi-Fi/DNS/connection/timeouts and HTTP 500/502/503/504 failures wait **60 seconds**, then retry that student once in a fresh session. A second temporary failure is logged and the run moves to the next student. Other rejected logins, redirect errors, 401/403/429 responses, mismatched profiles, captcha/verification pages, and missing fields still stop the run. Resolve those causes with the college before resuming. A prolonged Wi-Fi outage may leave many students uncollected; check the final warning and `network-failures.json`, then rerun when your connection is stable.
 
 If the current student page does not show course, section, or year, the script stops rather than guessing. Get a redacted HTML example of the approved profile page (remove all personal data, credentials, and session values) so the parser can be adapted.
 
@@ -63,7 +63,7 @@ Optional flags:
 
 ```text
 --output generated-artifacts/alumni
---delay-ms 10000
+--delay-ms 0
 --request-delay-ms 2000
 ```
 
