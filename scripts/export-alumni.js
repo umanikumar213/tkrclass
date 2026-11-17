@@ -24,11 +24,24 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function readRolls(text) {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+  const rolls = new Set();
+  const suffixes = [
+    ...Array.from({ length: 100 }, (_, n) => String(n).padStart(2, '0')),
+    ...Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').flatMap(letter =>
+      Array.from({ length: 10 }, (_, n) => `${letter}${n}`)),
+  ];
   for (let i = 0; i < lines.length; i++) {
-    if (!/^[A-Z0-9]{10}$/i.test(lines[i])) throw new Error(`Invalid roll-number format at input entry ${i + 1}. Use one 10-character roll number per line.`);
+    const entry = lines[i].toUpperCase();
+    if (/^[A-Z0-9]{8}$/.test(entry)) {
+      for (const suffix of suffixes) rolls.add(entry + suffix);
+    } else if (/^[A-Z0-9]{10}$/.test(entry)) {
+      rolls.add(entry);
+    } else {
+      throw new Error(`Invalid format at input entry ${i + 1}. Use one 8-character series prefix or 10-character full roll number per line.`);
+    }
   }
   if (!lines.length) throw new Error('The input file contains no roll numbers.');
-  return [...new Set(lines.map(s => s.toUpperCase()))];
+  return [...rolls];
 }
 
 function parseProfile(html, expectedRoll) {

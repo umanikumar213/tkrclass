@@ -15,6 +15,15 @@ async function main() {
     </table><p>Email: private@example.invalid</p><img src="/photo.jpg"></body></html>`;
   assert.deepEqual(readRolls(`\uFEFF# approved list\n${roll}\n${roll.toLowerCase()}\n`), [roll]);
   assert.throws(() => readRolls('bad-entry'));
+  const expanded = readRolls('# authorized series\n99K91A00\n99k91a00\n99K91A0001\n');
+  assert.equal(expanded.length, 360);
+  assert.equal(expanded[0], '99K91A0000');
+  assert.equal(expanded[99], '99K91A0099');
+  assert.equal(expanded[100], '99K91A00A0');
+  assert.ok(expanded.includes('99K91A00A1'));
+  assert.equal(expanded[359], '99K91A00Z9');
+  assert.equal(readRolls('99K91A00\n98K91A00').length, 720);
+  assert.throws(() => readRolls('99K91A000'));
   assert.throws(() => options(['--delay-ms', '1']));
   const parsed = parseProfile(html, roll);
   assert.deepEqual(parsed, { name: 'Test Student', roll_number: roll, course: 'B.Tech', section: 'A', year: 'IV' });

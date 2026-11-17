@@ -4,7 +4,18 @@ No webpage is created. Run from the project folder on the college-approved netwo
 
 ## Input
 
-Create `generated-artifacts/rolls.txt` locally, with one **college-approved** roll number per line. Blank lines and lines starting with `#` are ignored. Duplicates are removed. This script does not generate or discover accounts.
+Create `generated-artifacts/rolls.txt` locally, with one **college-approved** series prefix (8 characters) or full roll number (10 characters) per line. Blank lines and lines starting with `#` are ignored. Duplicates are removed, including overlap between full roll numbers and expanded series.
+
+Example series file:
+
+```text
+23K91A67
+24K95A67
+24K91A67
+25K95A67
+```
+
+Each prefix expands to suffixes **00–99, A0–A9, B0–B9, …, Z0–Z9**, including A1. That is **360 candidates per prefix**, or **1,440 for these four prefixes**. These are candidate roll numbers, not a count of students who actually exist. Use prefixes only when the college has authorized collection for the entire series. Run `--dry-run` first to check the total without contacting the portal.
 
 The login method matches the current attendance application: the roll number is submitted once as both username and password, in a fresh session per student. Use this only where the college explicitly authorizes that access method for the listed students. If passwords differ, do not attempt guesses; obtain an approved export/access method.
 
@@ -78,7 +89,7 @@ You do not need to start the website, install PostgreSQL, or copy any deployment
    npm install axios@1 axios-cookiejar-support@5 cheerio@1.0.0 tough-cookie@4
    ```
 
-6. Open Notepad and put one authorized roll number per line. Start with one for the first check. Choose **Save As**, select **All files**, use UTF-8, and save as `C:\AlumniExport\rolls.txt`. Ensure it is not named `rolls.txt.txt`.
+6. Open Notepad and put one authorized series prefix or full roll number per line. Start with one full roll number for the first check, then replace it with your approved series prefixes. Choose **Save As**, select **All files**, use UTF-8, and save as `C:\AlumniExport\rolls.txt`. Ensure it is not named `rolls.txt.txt`.
 7. In the same Command Prompt window, validate without making network requests:
 
    ```bat
