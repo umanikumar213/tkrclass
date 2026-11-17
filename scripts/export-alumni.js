@@ -149,7 +149,12 @@ async function collectStudent(roll, config) {
   // There is no password guessing, fallback credential list, or automatic retry.
   let page = await request('post', safeUrl(form.attr('action') || login.url, login.url), new URLSearchParams(payload).toString(), login.url);
   for (let i = 0; i < 4; i++) {
-    if (/invalid\s*(details|credentials)|incorrect\s*(password|credentials)/i.test(page.html)) throw new Error('Login rejected. Stopped after one attempt; check with the college.');
+    if (/\binvalid\s+details\b/i.test(page.html)) {
+      const error = new Error('Portal returned Invalid Details.');
+      error.code = 'INVALID_DETAILS';
+      throw error;
+    }
+    if (/invalid\s*credentials|incorrect\s*(password|credentials)/i.test(page.html)) throw new Error('Login rejected. Stopped after one attempt; check with the college.');
     const redirect = page.html.match(/(?:document\.|window\.|top\.|self\.|parent\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i)
       || page.html.match(/location\.replace\(\s*["']([^"']+)["']/i)
       || page.html.match(/http-equiv=["']?refresh["']?[^>]*content=["'][^"']*url=([^"'>\s]+)/i);
@@ -177,6 +182,10 @@ async function main() {
   if (!config.rolls) throw new Error('Provide --rolls FILE. See scripts/ALUMNI-EXPORT.md.');
   const rolls = readRolls(await fs.readFile(config.rolls, 'utf8'));
   if (config.dryRun) { console.log(`Validated ${rolls.length} unique roll numbers. No network requests made.`); return; }
+  await runExport(rolls, config);
+}
+
+async function runExport(rolls, config) {
   const output = path.resolve(config.output);
   if (output === path.resolve('public') || output.startsWith(path.resolve('public') + path.sep)) throw new Error('Do not store student exports in the public web directory.');
   await fs.mkdir(output, { recursive: true, mode: 0o700 });
@@ -186,16 +195,36 @@ async function main() {
     rows = JSON.parse(await fs.readFile(checkpoint, 'utf8'));
     if (!Array.isArray(rows) || rows.some(row => FIELDS.some(field => typeof row[field] !== 'string'))) throw new Error('Invalid checkpoint.');
   } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read checkpoint; preserve it and choose a new --output directory.'); }
+  const skippedFile = path.join(output, 'skipped-rolls.json');
+  let skipped = [];
+  try {
+    skipped = JSON.parse(await fs.readFile(skippedFile, 'utf8'));
+    if (!Array.isArray(skipped) || skipped.some(row => typeof row.roll_number !== 'string' || row.reason !== 'Invalid Details')) throw new Error('Invalid skip log.');
+  } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read skipped-rolls.json; preserve it and choose a new --output directory.'); }
   const completed = new Set(rows.map(row => row.roll_number));
-  console.log(`${rolls.length} unique input entries; ${rolls.filter(roll => completed.has(roll)).length} already exported. Sequential mode; no automatic retries.`);
+  const skippedRolls = new Set(skipped.map(row => row.roll_number));
+  console.log(`${rolls.length} unique input entries; ${rolls.filter(roll => completed.has(roll)).length} already exported; ${rolls.filter(roll => skippedRolls.has(roll)).length} previously skipped. Sequential mode; no automatic retries.`);
   let stopping = false;
-  process.once('SIGINT', () => { stopping = true; console.log('Stopping after the current student is saved.'); });
+  const stop = () => { stopping = true; console.log('Stopping after the current student is saved.'); };
+  process.once('SIGINT', stop);
+  try {
   for (let index = 0; index < rolls.length; index++) {
     if (stopping) break;
     const roll = rolls[index];
-    if (completed.has(roll)) continue;
+    if (completed.has(roll) || skippedRolls.has(roll)) continue;
     console.log(`Processing input entry ${index + 1}/${rolls.length}…`);
-    const row = await collectStudent(roll, config);
+    let row;
+    try {
+      row = await collectStudent(roll, config);
+    } catch (error) {
+      if (error.code !== 'INVALID_DETAILS') throw error;
+      skipped.push({ roll_number: roll, reason: 'Invalid Details' });
+      await writePrivate(skippedFile, JSON.stringify(skipped, null, 2));
+      skippedRolls.add(roll);
+      console.log(`Skipped input entry ${index + 1}: Invalid Details. Recorded in skipped-rolls.json.`);
+      if (!stopping && index < rolls.length - 1) await sleep(config.delay);
+      continue;
+    }
     const missing = FIELDS.filter(field => !row[field]);
     if (missing.length) {
       await writePrivate(path.join(output, 'needs-review.json'), JSON.stringify({ ...row, missing_fields: missing }, null, 2));
@@ -210,7 +239,10 @@ async function main() {
   }
   await writePrivate(path.join(output, 'students.csv'), '\uFEFF' + [FIELDS, ...rows.map(row => FIELDS.map(field => row[field]))].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n');
   console.log(`Saved ${rows.length} profiles to the private output directory. Keep exports out of Git and the public website.`);
+  } finally {
+    process.removeListener('SIGINT', stop);
+  }
 }
 
-module.exports = { readRolls, parseProfile, collectStudent, options };
+module.exports = { readRolls, parseProfile, collectStudent, options, runExport };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

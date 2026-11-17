@@ -1,7 +1,10 @@
 'use strict';
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { readRolls, parseProfile, collectStudent, options } = require('./export-alumni');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { readRolls, parseProfile, collectStudent, options, runExport } = require('./export-alumni');
 
 async function main() {
   const roll = '99K91A0001'; // synthetic fixture
@@ -31,10 +34,11 @@ async function main() {
       let text = '';
       for await (const chunk of req) text += chunk;
       const data = new URLSearchParams(text);
-      assert.equal(data.get('username'), roll);
-      assert.equal(data.get('password'), roll);
+      const submittedRoll = data.get('username');
+      assert.ok([roll, '99K91A0002'].includes(submittedRoll));
+      assert.equal(data.get('password'), submittedRoll);
       assert.equal(data.get('csrf'), 'fixture');
-      if (mode === 'invalid') { res.end('<script>alert("Invalid Details")</script>'); return; }
+      if (mode === 'invalid' || (mode === 'mixed' && submittedRoll === '99K91A0002')) { res.end('<script>alert("Invalid Details")</script>'); return; }
       res.setHeader('Set-Cookie', 'fixture_session=one; Path=/');
       res.end('<script>document.location="MainFrameset.php";</script>');
     } else if (req.url === '/portal/MainFrameset.php') {
@@ -49,21 +53,34 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const config = { base: `http://127.0.0.1:${server.address().port}/portal/`, allowHttp: true, requestDelay: 5 };
+  const output = await fs.mkdtemp(path.join(os.tmpdir(), 'alumni-skip-test-'));
   try {
     assert.deepEqual(await collectStudent(roll, config), parsed);
     assert.equal(logins, 1);
     assert.equal(photos, 0);
     mode = 'invalid';
-    await assert.rejects(collectStudent(roll, config), /Login rejected/);
+    await assert.rejects(collectStudent(roll, config), { code: 'INVALID_DETAILS' });
     assert.equal(logins, 2);
     mode = 'blocked';
     await assert.rejects(collectStudent(roll, config), /HTTP 429/);
     assert.equal(logins, 2);
     await assert.rejects(collectStudent(roll, { ...config, allowHttp: false }), /unencrypted HTTP/);
-    console.log('PASS: list parsing, exact five-field extraction, missing/mismatched fields, local login/session flow, no photo fetch, rejected login, throttling stop, HTTP safeguard.');
+    mode = 'mixed';
+    await runExport(['99K91A0002', roll], { ...config, output, delay: 0 });
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(output, 'skipped-rolls.json'), 'utf8')),
+      [{ roll_number: '99K91A0002', reason: 'Invalid Details' }]);
+    assert.equal(JSON.parse(await fs.readFile(path.join(output, 'students.json'), 'utf8'))[0].roll_number, roll);
+    assert.ok((await fs.readFile(path.join(output, 'students.csv'), 'utf8')).includes('Test Student'));
+    const beforeResume = logins;
+    await runExport(['99K91A0002', roll], { ...config, output, delay: 0 });
+    assert.equal(logins, beforeResume);
+    mode = 'blocked';
+    await assert.rejects(runExport(['99K91A0003'], { ...config, output, delay: 0 }), /HTTP 429/);
+    console.log('PASS: parsing, five-field export, local login, Invalid Details skip and continue, skip persistence, resume without extra logins, blocking stop, and HTTP safeguard.');
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
+    await fs.rm(output, { recursive: true, force: true });
   }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
