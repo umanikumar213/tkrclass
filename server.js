@@ -15,12 +15,14 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", ...(process.env.TURNSTILE_SITE_KEY && process.env.TURNSTILE_SECRET ? ['https://challenges.cloudflare.com'] : [])],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https://tkrcet.in'],
       mediaSrc: ["'self'", 'blob:'],
+      frameSrc: ["'self'", ...(process.env.TURNSTILE_SITE_KEY && process.env.TURNSTILE_SECRET ? ['https://challenges.cloudflare.com'] : [])],
+      connectSrc: ["'self'", ...(process.env.TURNSTILE_SITE_KEY && process.env.TURNSTILE_SECRET ? ['https://challenges.cloudflare.com'] : [])],
       frameAncestors: ["'none'"],
       upgradeInsecureRequests: null,
     },
@@ -38,6 +40,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(require('./chat'));
 app.use(require('./reyi'));
+app.use(require('./spotlight'));
 app.use(express.static('public'));
 
 const BASE  = 'http://103.171.190.44/TKRCET';
@@ -215,8 +218,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const { initDb } = require('./chat');
 const { initReyiDb } = require('./reyi');
+const { initSpotlightDb } = require('./spotlight');
 async function start() {
-  await Promise.all([initDb(), initReyiDb()]);
+  await Promise.all([initDb(), initReyiDb(), initSpotlightDb()]);
   return app.listen(PORT, () => console.log('Server running on port ' + PORT));
 }
 if (require.main === module) {

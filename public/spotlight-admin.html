@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7fb">
+  <title>TKR Spotlight · Admin</title>
+  <link rel="stylesheet" href="/spotlight.css">
+  <script defer src="/spotlight.js"></script>
+</head>
+<body data-spotlight-page="admin">
+  <main class="sp-shell sp-narrow" id="app">
+    <header class="sp-topbar">
+      <a class="sp-brand" href="/spotlight" aria-label="TKR Spotlight">
+        <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
+        <span><span class="sp-brand-name">TKR Spotlight</span><span class="sp-brand-sub">Review desk</span></span>
+      </a>
+      <a class="sp-back" href="/spotlight">Public page</a>
+    </header>
+    <section id="adminLoginView" class="sp-login-card">
+      <div class="sp-kicker">Staff only</div>
+      <h1>Review desk</h1>
+      <p class="sp-intro">Sign in with the existing admin password to review notes and manage student profiles.</p>
+      <form id="adminLoginForm">
+        <label for="adminPassword">Admin password</label>
+        <input class="sp-login-input" id="adminPassword" type="password" autocomplete="current-password" required>
+        <button class="sp-btn" id="adminLoginButton" type="submit">Open review desk</button>
+        <div id="adminLoginError" class="sp-message" role="alert"></div>
+      </form>
+    </section>
+    <section id="adminView" hidden>
+      <div class="sp-section-head" style="margin:14px 0">
+        <div><div class="sp-kicker">TKR Spotlight</div><h1 class="sp-title" style="font-size:34px">Review desk</h1></div>
+        <button type="button" id="adminLogout" class="sp-btn sp-btn-secondary">Sign out</button>
+      </div>
+      <nav id="adminTabs" class="sp-admin-tabs" aria-label="Moderation views">
+        <button type="button" class="sp-admin-tab" data-admin-tab="pending" aria-selected="true">Pending <span id="pendingBadge" class="sp-badge">0</span></button>
+        <button type="button" class="sp-admin-tab" data-admin-tab="reported" aria-selected="false">Reported</button>
+        <button type="button" class="sp-admin-tab" data-admin-tab="students" aria-selected="false">Hidden students</button>
+      </nav>
+      <div id="adminContent" aria-live="polite"></div>
+      <div id="adminError" class="sp-message" role="alert"></div>
+    </section>
+    <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>

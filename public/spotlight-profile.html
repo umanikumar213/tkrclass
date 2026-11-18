@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!--SPOTLIGHT_META-->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7fb">
+  <title>TKR Spotlight</title>
+  <link rel="stylesheet" href="/spotlight.css">
+  <script defer src="/spotlight.js"></script>
+</head>
+<body data-spotlight-page="profile">
+  <main class="sp-shell sp-narrow" id="app">
+    <header class="sp-topbar">
+      <a class="sp-brand" href="/spotlight" aria-label="TKR Spotlight home">
+        <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
+        <span><span class="sp-brand-name">TKR Spotlight</span><span class="sp-brand-sub">A little appreciation goes far</span></span>
+      </a>
+      <a class="sp-back" href="/spotlight"><span aria-hidden="true">←</span> Discover</a>
+    </header>
+    <div id="profileView" aria-live="polite">
+      <div class="sp-skeleton" style="height:210px"></div>
+      <div class="sp-skeleton" style="height:145px;margin-top:18px"></div>
+    </div>
+    <section id="noteWall" class="sp-section" hidden>
+      <div class="sp-section-head"><div><h2 class="sp-section-title">The kind words wall</h2><p class="sp-section-caption">Notes show up here after a quick review.</p></div></div>
+      <div id="notesList" class="sp-notes"></div>
+    </section>
+    <section id="leaveNote" class="sp-section" hidden>
+      <form id="noteForm" class="sp-composer">
+        <div class="sp-composer-heading">Leave a note</div>
+        <p class="sp-composer-hint">Say something thoughtful. Notes are reviewed before they appear.</p>
+        <label for="noteText" class="sp-kicker" style="display:block;margin-bottom:6px">Your message</label>
+        <textarea id="noteText" class="sp-textarea" maxlength="200" placeholder="A kind word can change someone's day." required></textarea>
+        <div class="sp-compose-bottom"><span id="noteCounter" class="sp-counter">0 / 200</span><button type="submit" id="noteSubmit" class="sp-btn">Send for review</button></div>
+        <div id="turnstileNote" class="sp-turnstile"></div>
+        <div id="noteMessage" class="sp-message" role="status"></div>
+      </form>
+    </section>
+    <footer class="sp-footer"><a href="#" id="removeProfile">Want your profile removed? Contact admin</a></footer>
+    <div id="shareDialogHost"></div>
+    <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>

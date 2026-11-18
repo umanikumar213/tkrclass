@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7fb">
+  <title>TKR Spotlight</title>
+  <link rel="stylesheet" href="/spotlight.css">
+  <script defer src="/spotlight.js"></script>
+</head>
+<body data-spotlight-page="directory">
+  <main class="sp-shell" id="app">
+    <header class="sp-topbar">
+      <a class="sp-brand" href="/spotlight" aria-label="TKR Spotlight home">
+        <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
+        <span><span class="sp-brand-name">TKR Spotlight</span><span class="sp-brand-sub">A little appreciation goes far</span></span>
+      </a>
+      <a class="sp-quiet-link" href="/" aria-label="Back to attendance">Attendance</a>
+    </header>
+    <section class="sp-hero" aria-labelledby="spotlight-heading">
+      <div class="sp-hero-row">
+        <div class="sp-hero-copy">
+          <div class="sp-kicker">Our campus, in the spotlight</div>
+          <h1 class="sp-title" id="spotlight-heading">Good people.<br>Good things said.</h1>
+          <p class="sp-intro">Find someone from TKR, leave a kind note, or give a classmate their moment.</p>
+        </div>
+        <button type="button" class="sp-random" id="randomProfile"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Random Profile</button>
+      </div>
+    </section>
+    <section class="sp-discovery" aria-label="Find students">
+      <div class="sp-search-wrap"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input class="sp-input" id="studentSearch" type="search" autocomplete="off" placeholder="Search a name or roll number" aria-label="Search a name or roll number"></div>
+      <div id="filterSteps" class="sp-filters" aria-label="Filter students"></div>
+      <div class="sp-section-head">
+        <div><h2 class="sp-section-title">Meet your campus</h2><p class="sp-section-caption" id="directoryCaption">A few familiar faces, and some you have not met yet.</p></div>
+      </div>
+      <div id="studentGrid" class="sp-grid" aria-live="polite"></div>
+      <button type="button" id="loadMore" class="sp-more" hidden>Load more students</button>
+    </section>
+    <section class="sp-section" aria-labelledby="leader-heading">
+      <div class="sp-section-head">
+        <div><h2 class="sp-section-title" id="leader-heading">Campus Leaderboard</h2><p class="sp-section-caption">A small snapshot of the kind things happening here.</p></div>
+        <div class="sp-tabs" role="tablist" aria-label="Campus appreciation">
+          <button class="sp-tab" type="button" role="tab" aria-selected="true" data-leader-tab="trending">Trending</button>
+          <button class="sp-tab" type="button" role="tab" aria-selected="false" data-leader-tab="liked">Most liked</button>
+          <button class="sp-tab" type="button" role="tab" aria-selected="false" data-leader-tab="noted">Most noted</button>
+        </div>
+      </div>
+      <div id="leaderboard" class="sp-list" aria-live="polite"></div>
+    </section>
+    <footer class="sp-footer">A student appreciation space for TKR College of Engineering &amp; Technology.</footer>
+    <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>
