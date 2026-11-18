@@ -1,7 +1,11 @@
 const express = require('express');
 const multer = require('multer');
 const sharp = require('sharp');
-const { Pool } = require('pg');
+const pool = require('./db');
+const { safeEqual, parseCookies, ensureReactorIdentity, adminProtection, routeLimit, submissionGuard } = require('./security');
+const { reactionHandler } = require('./reactions');
+const { validateMp4 } = require('./media-validation');
+const { deleteTelegramMessage } = require('./telegram-delete');
 const path = require('path');
 const crypto = require('crypto');
 const axios = require('axios');
@@ -10,12 +14,6 @@ const fs = require('fs');
 const os = require('os');
 
 const router = express.Router();
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
-    ? { rejectUnauthorized: false }
-    : false,
-});
 
 const CATEGORIES = new Set(['Heartache', 'Nostalgia', 'Goosebumps', 'Midnight Thoughts', 'Alone', 'Healing']);
 const REACTIONS = new Set(['heartache', 'pleading', 'goosebumps', 'hug', 'healing']);
@@ -24,15 +22,8 @@ const REYI_CACHE_TTL = 300_000;
 const feedCache = new Map();
 const lastSubmission = new Map();
 const lastComment = new Map();
-const reactionWindows = new Map();
-const adminFailures = new Map();
 const SUBMISSION_RATE_MS = 10 * 60 * 1000;
 const COMMENT_RATE_MS = 60 * 1000;
-const REACTION_WINDOW_MS = 60 * 1000;
-const REACTION_MAX_PER_WINDOW = 30;
-const ADMIN_MAX_ATTEMPTS = 5;
-const ADMIN_LOCKOUT_MS = 15 * 60 * 1000;
-const ADMIN_WINDOW_MS = 15 * 60 * 1000;
 const ADMIN_SESSION_MS = 30 * 60 * 1000;
 const TELEGRAM_FILE_PATH_CACHE_MS = 60 * 60 * 1000;
 const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
@@ -119,49 +110,11 @@ function requireReyiOpen(req, res, next) {
   next();
 }
 
-function requireAdmin(req, res, next) {
-  const ip = clientIp(req);
-  const now = Date.now();
-  const current = adminFailures.get(ip);
-  if (current && current.lockedUntil && current.lockedUntil > now) {
-    const minutes = Math.ceil((current.lockedUntil - now) / 60000);
-    return res.status(429).json({ success: false, message: `Too many failed attempts. Try again in ${minutes} minute(s).` });
-  }
-  if (!process.env.ADMIN_PASSWORD) {
-    return res.status(500).json({ success: false, message: 'ADMIN_PASSWORD is not configured.' });
-  }
-  if (!hasAdminAccess(req)) {
-    const state = current && now - current.windowStart < ADMIN_WINDOW_MS
-      ? current
-      : { count: 0, windowStart: now, lockedUntil: null };
-    state.count += 1;
-    if (state.count >= ADMIN_MAX_ATTEMPTS) state.lockedUntil = now + ADMIN_LOCKOUT_MS;
-    adminFailures.set(ip, state);
-    return res.status(401).json({ success: false, message: 'Wrong password.' });
-  }
-  adminFailures.delete(ip);
-  next();
-}
-
-function parseCookies(header) {
-  const cookies = {};
-  for (const pair of String(header || '').split(';')) {
-    const index = pair.indexOf('=');
-    if (index < 1) continue;
-    cookies[pair.slice(0, index).trim()] = decodeURIComponent(pair.slice(index + 1).trim());
-  }
-  return cookies;
-}
-
-function signVisitor(id) {
-  return crypto.createHmac('sha256', process.env.SESSION_SECRET).update(id).digest('base64url');
-}
-
-function safeEqual(left, right) {
-  const a = Buffer.from(String(left || ''));
-  const b = Buffer.from(String(right || ''));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+const { requireAdmin, mediaAccess } = adminProtection(hasAdminSession);
+const imageLimit = routeLimit(120, 60000);
+const streamLimit = routeLimit(60, 60000);
+const reportLimit = routeLimit(10, 3600000);
+const reactionLimit = routeLimit(30, 60000);
 
 function signAdminSession(timestamp) {
   return crypto.createHmac('sha256', process.env.SESSION_SECRET).update(`reyi-admin:${timestamp}`).digest('base64url');
@@ -179,52 +132,11 @@ function hasAdminSession(req) {
   return safeEqual(signature, signAdminSession(timestamp));
 }
 
-function hasAdminAccess(req) {
-  return Boolean(
-    (process.env.ADMIN_PASSWORD && req.headers['x-admin-password'] === process.env.ADMIN_PASSWORD)
-    || hasAdminSession(req)
-  );
-}
-
 function setAdminSession(req, res) {
   if (!process.env.SESSION_SECRET) return;
   const timestamp = Date.now();
   const secure = req.secure ? '; Secure' : '';
   res.append('Set-Cookie', `reyi_admin=${timestamp}.${signAdminSession(timestamp)}; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1000)}; Path=/; HttpOnly; SameSite=Strict${secure}`);
-}
-
-function getReactorHash(req) {
-  if (!process.env.SESSION_SECRET) return null;
-  const token = parseCookies(req.headers.cookie).reyi_visitor;
-  if (!token) return null;
-  const dot = token.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const id = token.slice(0, dot);
-  const signature = token.slice(dot + 1);
-  if (!safeEqual(signature, signVisitor(id))) return null;
-  return crypto.createHash('sha256').update(id).digest('hex');
-}
-
-function ensureReactorIdentity(req, res) {
-  const existing = getReactorHash(req);
-  if (existing || !process.env.SESSION_SECRET) return existing;
-  const id = crypto.randomUUID();
-  const signed = `${id}.${signVisitor(id)}`;
-  const secure = req.secure ? '; Secure' : '';
-  res.append('Set-Cookie', `reyi_visitor=${encodeURIComponent(signed)}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax${secure}`);
-  return crypto.createHash('sha256').update(id).digest('hex');
-}
-
-function consumeReactionRate(req) {
-  const ip = clientIp(req);
-  const now = Date.now();
-  let state = reactionWindows.get(ip);
-  if (!state || now - state.startedAt >= REACTION_WINDOW_MS) {
-    state = { startedAt: now, count: 0 };
-  }
-  state.count += 1;
-  reactionWindows.set(ip, state);
-  return state.count <= REACTION_MAX_PER_WINDOW;
 }
 
 async function compressStoryImage(file) {
@@ -274,7 +186,7 @@ async function sendVideoToTelegram(file) {
   });
   const fileId = response.data?.result?.video?.file_id;
   if (!response.data?.ok || !fileId) throw new Error('Telegram did not return a video file ID.');
-  return fileId;
+  return { fileId, messageId: response.data.result.message_id ?? null };
 }
 
 async function telegramFilePath(fileId) {
@@ -295,16 +207,11 @@ async function telegramFilePath(fileId) {
 
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, state] of reactionWindows) {
-    if (now - state.startedAt > REACTION_WINDOW_MS * 2) reactionWindows.delete(ip);
-  }
   for (const [ip, timestamp] of lastComment) {
     if (now - timestamp > COMMENT_RATE_MS * 2) lastComment.delete(ip);
   }
-  for (const [ip, state] of adminFailures) {
-    if ((state.lockedUntil && state.lockedUntil <= now) || now - state.windowStart > ADMIN_WINDOW_MS + ADMIN_LOCKOUT_MS) {
-      adminFailures.delete(ip);
-    }
+  for (const [ip, timestamp] of lastSubmission) {
+    if (now - timestamp > SUBMISSION_RATE_MS * 2) lastSubmission.delete(ip);
   }
   for (const [fileId, entry] of telegramFilePathCache) {
     if (entry.expiresAt <= now) telegramFilePathCache.delete(fileId);
@@ -369,22 +276,8 @@ async function initReyiDb() {
       ADD COLUMN IF NOT EXISTS react_healing INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS telegram_file_id TEXT,
       ADD COLUMN IF NOT EXISTS legacy_video_archived BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS reported BOOLEAN NOT NULL DEFAULT FALSE;
-    UPDATE reyi_posts
-    SET legacy_video_archived = TRUE
-    WHERE post_type = 'video' AND telegram_file_id IS NULL;
-    UPDATE reyi_posts
-    SET category = CASE category
-      WHEN 'Heartbreak' THEN 'Heartache'
-      WHEN 'Inspiration' THEN 'Healing'
-      WHEN 'Deep Thoughts' THEN 'Midnight Thoughts'
-      WHEN 'Late Night Vibe' THEN 'Alone'
-      ELSE category
-    END
-    WHERE category IN ('Heartbreak', 'Inspiration', 'Deep Thoughts', 'Late Night Vibe');
-    UPDATE reyi_posts SET expires_at = NULL WHERE expires_at IS NOT NULL;
-    DELETE FROM reyi_reactions
-    WHERE emoji NOT IN ('heartache', 'pleading', 'goosebumps', 'hug', 'healing');
+      ADD COLUMN IF NOT EXISTS reported BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS telegram_message_id BIGINT;
   `);
   console.log('[reyi] DB schema ready');
 }
@@ -397,7 +290,7 @@ router.get('/api/reyi/status', (req, res) => {
   res.json({ success: true, ...getReyiStatus() });
 });
 
-router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
+router.post('/api/reyi/posts', requireReyiOpen, submissionGuard(lastSubmission, SUBMISSION_RATE_MS), (req, res) => {
   upload.fields([{ name: 'video', maxCount: 1 }, { name: 'story_image', maxCount: 1 }])(req, res, async err => {
     if (err) {
       await removeTemporaryUploads(req);
@@ -405,13 +298,6 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
       return res.status(400).json({ success: false, message });
     }
     try {
-      const ip = clientIp(req);
-      const last = lastSubmission.get(ip);
-      if (last && Date.now() - last < SUBMISSION_RATE_MS) {
-        const remaining = Math.ceil((SUBMISSION_RATE_MS - (Date.now() - last)) / 60000);
-        return res.status(429).json({ success: false, message: `Please wait ${remaining} minute(s) before submitting again.` });
-      }
-
       const postType = String(req.body.post_type || '');
       const category = String(req.body.category || '');
       const caption = String(req.body.caption || '').trim();
@@ -426,6 +312,7 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
       }
 
       let telegramFileId = null;
+      let telegramMessageId = null;
       let storyText = null;
       let imageData = null;
       let imageType = null;
@@ -436,7 +323,10 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
         if (storyImage || !videoFile) {
           return res.status(400).json({ success: false, message: 'Choose an MP4 video file.' });
         }
-        telegramFileId = await sendVideoToTelegram(videoFile);
+        await validateMp4(videoFile);
+        const uploaded = await sendVideoToTelegram(videoFile);
+        telegramFileId = uploaded.fileId;
+        telegramMessageId = uploaded.messageId;
       } else {
         if (videoFile) return res.status(400).json({ success: false, message: 'Videos can only be attached to video posts.' });
         if (storyImage && storyImage.size > STORY_IMAGE_MAX_BYTES) {
@@ -450,13 +340,13 @@ router.post('/api/reyi/posts', requireReyiOpen, (req, res) => {
 
       await pool.query(
         `INSERT INTO reyi_posts
-          (post_type, telegram_file_id, story_text, story_image_data, story_image_type, category, caption)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [postType, telegramFileId, storyText, imageData, imageType, category, caption || null]
+          (post_type, telegram_file_id, story_text, story_image_data, story_image_type, category, caption, telegram_message_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [postType, telegramFileId, storyText, imageData, imageType, category, caption || null, telegramMessageId]
       );
-      lastSubmission.set(ip, Date.now());
       res.json({ success: true, message: 'Sent.' });
     } catch (error) {
+      if (error.code === 'INVALID_VIDEO') return res.status(400).json({ success: false, message: 'Use a valid MP4 video.' });
       console.error('[reyi] submission error:', error.message);
       const message = error.message === 'Telegram video storage is not configured.'
         ? 'Telegram video uploads are not configured.'
@@ -509,7 +399,7 @@ router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
   }
 });
 
-router.post('/api/reyi/posts/:id/report', requireReyiOpen, async (req, res) => {
+router.post('/api/reyi/posts/:id/report', reportLimit, requireReyiOpen, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
@@ -526,11 +416,11 @@ router.post('/api/reyi/posts/:id/report', requireReyiOpen, async (req, res) => {
   }
 });
 
-router.get('/api/reyi/image/:id', async (req, res) => {
+router.get('/api/reyi/image/:id', imageLimit, mediaAccess, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).end();
-    const admin = hasAdminAccess(req);
+    const admin = req.isMediaAdmin;
     const status = getReyiStatus();
     if (!admin && !status.open) return res.status(403).end();
 
@@ -551,11 +441,11 @@ router.get('/api/reyi/image/:id', async (req, res) => {
   }
 });
 
-router.get('/api/reyi/stream/:fileId', async (req, res) => {
+router.get('/api/reyi/stream/:fileId', streamLimit, mediaAccess, async (req, res) => {
   try {
     const fileId = String(req.params.fileId || '');
     if (!fileId || fileId.length > 512) return res.status(400).end();
-    const admin = hasAdminAccess(req);
+    const admin = req.isMediaAdmin;
     const status = getReyiStatus();
     if (!admin && !status.open) return res.status(403).end();
 
@@ -592,34 +482,9 @@ router.get('/api/reyi/stream/:fileId', async (req, res) => {
   }
 });
 
-router.post('/api/reyi/posts/:id/react', requireReyiOpen, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const { emoji, prev } = req.body;
-    if (!Number.isInteger(id)
-      || (emoji != null && !REACTIONS.has(emoji))
-      || (prev != null && !REACTIONS.has(prev))) {
-      return res.status(400).json({ success: false });
-    }
-    if (!consumeReactionRate(req)) return res.status(429).json({ success: false, message: 'Too many reactions. Slow down.' });
-    const updates = [];
-    if (prev != null) updates.push(`react_${prev} = GREATEST(0, react_${prev} - 1)`);
-    if (emoji != null) updates.push(`react_${emoji} = react_${emoji} + 1`);
-    if (!updates.length) return res.json({ success: true, emoji: null });
-    const result = await pool.query(
-      `UPDATE reyi_posts SET ${updates.join(', ')}
-       WHERE id = $1 AND status = 'approved'
-       RETURNING id`,
-      [id]
-    );
-    if (!result.rows.length) return res.status(404).json({ success: false });
-    invalidateFeedCache();
-    res.json({ success: true, emoji: emoji ?? null });
-  } catch (error) {
-    console.error('[reyi] reaction error:', error.message);
-    res.status(500).json({ success: false });
-  }
-});
+router.post('/api/reyi/posts/:id/react', requireReyiOpen, reactionLimit, reactionHandler({
+  pool, posts: 'reyi_posts', reactions: 'reyi_reactions', emojis: REACTIONS, invalidate: invalidateFeedCache,
+}));
 
 router.get('/api/reyi/posts/:id/comments', requireReyiOpen, async (req, res) => {
   try {
@@ -696,8 +561,9 @@ router.get('/api/reyi/admin/queue', requireAdmin, async (req, res) => {
 });
 
 router.post('/api/reyi/admin/approve/:id', requireAdmin, async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await client.query('BEGIN');
@@ -720,11 +586,11 @@ router.post('/api/reyi/admin/approve/:id', requireAdmin, async (req, res) => {
     invalidateFeedCache();
     res.json({ success: true, postNumber });
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('[reyi] approval error:', error.message);
     res.status(500).json({ success: false, message: 'Could not approve post.' });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
@@ -734,15 +600,15 @@ router.post('/api/reyi/admin/reject/:id', requireAdmin, async (req, res) => {
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     const result = await pool.query(
       `DELETE FROM reyi_posts
-       WHERE id = $1 AND reported = TRUE
-       RETURNING id`,
+       WHERE id = $1
+       RETURNING telegram_message_id, post_type`,
       [id]
     );
     if (result.rows.length) {
       invalidateFeedCache();
+      if (result.rows[0].post_type === 'video') await deleteTelegramMessage(result.rows[0].telegram_message_id);
       return res.json({ success: true });
     }
-    await pool.query(`UPDATE reyi_posts SET status = 'rejected' WHERE id = $1 AND status = 'pending'`, [id]);
     res.json({ success: true });
   } catch {
     res.status(500).json({ success: false, message: 'Could not remove post.' });

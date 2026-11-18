@@ -288,11 +288,12 @@ function render(d){
   
   const rollUpper = (d.rollNo || '').toUpperCase();
   const initText = initials(d.name);
-  document.getElementById('ava').innerHTML = `
-    <img src="https://tkrcet.in/images/${rollUpper}.webp" 
-         onerror="this.onerror=null; this.parentElement.textContent='${initText}';" 
-         alt="Profile">
-  `;
+  const avatar = document.getElementById('ava');
+  const profileImage = document.createElement('img');
+  profileImage.alt = 'Profile';
+  profileImage.onerror = () => { avatar.textContent = initText; };
+  profileImage.src = 'https://tkrcet.in/images/' + encodeURIComponent(rollUpper) + '.webp';
+  avatar.replaceChildren(profileImage);
   
   const pct=parseFloat(d.overall||(d.summary&&d.summary.percentage)||0)||0;
 

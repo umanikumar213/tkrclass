@@ -4,9 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const vm = require('node:vm');
 const { Readable } = require('node:stream');
-const { createRequire } = require('node:module');
+const { createTestLoader } = require('./security-test-loader');
 const { Pool } = require('pg');
 const express = require('express');
 const sharp = require('sharp');
@@ -25,8 +24,6 @@ async function main() {
   let server;
   let telegramUploads = 0;
   const sourcePath = path.resolve(__dirname, '../chat.js');
-  const realRequire = createRequire(sourcePath);
-  const moduleStub = { exports: {} };
   const admin = { 'x-admin-password': 'test-only-admin-password' };
   // Minimal ISO-BMFF fixture for the application's container validator, not a playable movie.
   const box = (name, content) => {
@@ -49,12 +46,13 @@ async function main() {
         pools.push(this);
       }
     }
-    vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), {
-      require(name) {
-        if (name === 'pg') return { Pool: TestPool };
-        if (name === 'os') return { tmpdir: () => testDir };
-        if (name === 'axios') return {
+    const loader = createTestLoader({
+      pool: new TestPool(),
+      directory: testDir,
+      timers,
+      axios: {
           async post(url, form) {
+            if (url.endsWith('/deleteMessage')) return { data: { ok: true } };
             assert.ok(url.endsWith('/sendVideo'));
             // Consume the multipart stream so the local file descriptor is closed normally.
             await new Promise((resolve, reject) => {
@@ -62,27 +60,15 @@ async function main() {
               form.resume();
             });
             telegramUploads++;
-            return { data: { ok: true, result: { video: { file_id: `test-video-${telegramUploads}` } } } };
+            return { data: { ok: true, result: { message_id: telegramUploads, video: { file_id: `test-video-${telegramUploads}` } } } };
           },
           async get(url) {
             if (url.endsWith('/getFile')) return { data: { ok: true, result: { file_path: 'test.mp4' } } };
             return { status: 200, headers: { 'content-length': mp4.length }, data: Readable.from(mp4) };
           },
-        };
-        return realRequire(name);
       },
-      module: moduleStub,
-      __dirname: path.dirname(sourcePath),
-      // Never use the real admin password or Telegram credentials in tests.
-      process: { env: { ADMIN_PASSWORD: admin['x-admin-password'], TELEGRAM_BOT_TOKEN: 'test-token', TELEGRAM_CHANNEL_ID: 'test-channel' } },
-      Buffer, console,
-      setInterval(fn, delay) {
-        const timer = setInterval(fn, delay);
-        timers.push(timer);
-        return timer;
-      },
-    }, { filename: sourcePath });
-    const router = moduleStub.exports;
+    });
+    const router = loader.load(sourcePath);
     await router.initDb();
     await router.initDb(); // additive migration is safe to repeat
     const db = pools[0];

@@ -220,22 +220,24 @@
   }
 
   async function react(id,tapped,container){
+    if(container.dataset.busy)return;
+    container.dataset.busy='1';
     const previous=reactionFor(id);
     const emoji=previous===tapped?null:tapped;
     const buttons=container.querySelectorAll('.react');
-    REACTIONS.forEach(([key],index)=>{
-      const count=buttons[index].querySelector('span');
-      let value=parseInt(count.textContent,10)||0;
-      if(key===previous&&previous!==emoji)value=Math.max(0,value-1);
-      if(key===emoji)value++;
-      count.textContent=value;
-      buttons[index].classList.toggle('sel',key===emoji);
-    });
-    setReaction(id,emoji);
+    buttons.forEach(button=>button.disabled=true);
     try{
-      const response=await fetch(`/api/reyi/posts/${id}/react`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji,prev:previous})});
+      const response=await fetch(`/api/reyi/posts/${id}/react`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji})});
       if(response.status===403)refreshStatus();
-    }catch{}
+      const data=await response.json();
+      if(!response.ok||!data.success)throw new Error('Reaction not saved');
+      setReaction(id,data.emoji);
+      REACTIONS.forEach(([key],index)=>{
+        buttons[index].querySelector('span').textContent=data.counts['react_'+key];
+        buttons[index].classList.toggle('sel',key===data.emoji);
+      });
+    }catch{/* Keep the last confirmed counts and selection on failure. */}
+    finally{delete container.dataset.busy;buttons.forEach(button=>button.disabled=false);}
   }
 
   async function toggleComments(id,button){

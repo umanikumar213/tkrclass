@@ -217,24 +217,26 @@ function reactRow(p){
 }
 
 async function react(id,tapped,container){
+  if(container.dataset.busy)return;
+  container.dataset.busy='1';
   const prev=getReaction(id);
   const emoji=tapped===prev?null:tapped;
   const btns=container.querySelectorAll('.rbtn');
-  EMOJIS.forEach(([k],i)=>{
-    const span=btns[i].querySelector('span');
-    let c=parseInt(span.textContent,10)||0;
-    if(k===prev&&prev!==emoji)c=Math.max(0,c-1);
-    if(k===emoji)c++;
-    span.textContent=c;
-    btns[i].classList.toggle('sel',k===emoji);
-  });
-  setReaction(id,emoji);
+  btns.forEach(btn=>btn.disabled=true);
   try{
-    await fetch('/api/chat/posts/'+id+'/react',{
+    const response=await fetch('/api/chat/posts/'+id+'/react',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({emoji,prev})
+      body:JSON.stringify({emoji})
     });
-  }catch(e){}
+    const data=await response.json();
+    if(!response.ok||!data.success)throw new Error('Reaction not saved');
+    setReaction(id,data.emoji);
+    EMOJIS.forEach(([key],i)=>{
+      btns[i].querySelector('span').textContent=data.counts['react_'+key];
+      btns[i].classList.toggle('sel',key===data.emoji);
+    });
+  }catch(e){/* Keep the last confirmed counts and selection on failure. */}
+  finally{delete container.dataset.busy;btns.forEach(btn=>btn.disabled=false);}
 }
 
 // --- comments ---

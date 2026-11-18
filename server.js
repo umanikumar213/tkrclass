@@ -5,10 +5,35 @@ const cors = require('cors');
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const { isPortalUrl, BoundedCache } = require('./attendance-security');
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(cors());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://tkrcet.in'],
+      mediaSrc: ["'self'", 'blob:'],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: null,
+    },
+  },
+  frameguard: { action: 'deny' },
+}));
+const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean));
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+  if (origin && origin !== `${req.protocol}://${req.get('host')}` && !allowedOrigins.has(origin)) {
+    return res.status(403).json({ success: false, message: 'Origin is not allowed.' });
+  }
+  cors({ origin: origin || false })(req, res, next);
+});
 app.use(express.json());
 app.use(require('./chat'));
 app.use(require('./reyi'));
@@ -19,32 +44,35 @@ const LOGIN = `${BASE}/`;
 const abs = (href, base) => { try { return new URL(href, base).href; } catch { return null; } };
 
 // Short-lived cache so repeat checks of the same roll don't hammer the slow portal.
-const CACHE = new Map();          // roll -> { at, data }
 const CACHE_MS = 60 * 1000;       // 60 seconds
+const CACHE = new BoundedCache(500, CACHE_MS);
+setInterval(() => CACHE.prune(), 5 * 60 * 1000).unref();
 
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,   // 1 minute
-  max: 10,               // 10 requests per IP per minute
+  max: 5,                // 5 requests per IP per minute
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many login attempts. Please try again in a minute.' }
 });
 
 app.post('/login', loginLimiter, async (req, res) => {
-  const roll = (req.body.rollNumber || '').trim();
-  if (!roll) return res.json({ success: false, message: 'No roll number provided' });
+  const roll = typeof req.body?.rollNumber === 'string' ? req.body.rollNumber.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9]{8,12}$/.test(roll)) return res.status(400).json({ success: false, message: 'Enter a valid roll number.' });
 
   const cached = CACHE.get(roll.toUpperCase());
   if (cached && (Date.now() - cached.at) < CACHE_MS) {
-    console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → served from cache`);
     return res.json({ ...cached.data, cached: true });
   }
-  console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → fetching live from portal`);
 
   try {
     const jar = new CookieJar();
     const client = wrapper(axios.create({
       jar, withCredentials: true, maxRedirects: 5, validateStatus: s => s < 500,
+      beforeRedirect(options) {
+        const target = `${options.protocol}//${options.hostname}${options.port ? ':' + options.port : ''}${options.path}`;
+        if (!isPortalUrl(target)) throw new Error('Blocked an unexpected portal redirect.');
+      },
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
       timeout: 30000
     }));
@@ -54,6 +82,7 @@ app.post('/login', loginLimiter, async (req, res) => {
     const $ = cheerio.load(loginPage.data);
     const form = $('form').first();
     const action = abs(form.attr('action') || '', LOGIN) || LOGIN;
+    if (!isPortalUrl(action)) throw new Error('Blocked an unexpected login form action.');
     const payload = {};
     let userField = '', passField = '';
     form.find('input').each((i, el) => {
@@ -83,7 +112,6 @@ app.post('/login', loginLimiter, async (req, res) => {
 
     // Portal rejects wrong credentials with an "Invalid Details" alert.
     if (/invalid\s*details/i.test(mainHtml)) {
-      console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → invalid details`);
       return res.json({ success: false, message: 'Invalid details. Please check your roll number.' });
     }
 
@@ -100,7 +128,7 @@ app.post('/login', loginLimiter, async (req, res) => {
       return null;
     };
     for (let i = 0; i < 4; i++) {
-      const next = findRedirect(mainHtml, mainUrl); if (!next) break;
+      const next = findRedirect(mainHtml, mainUrl); if (!next || !isPortalUrl(next)) break;
       try { const r = await client.get(next, { headers: { Referer: mainUrl } }); mainUrl = next; mainHtml = String(r.data); } catch { break; }
     }
     if (!/<frame\b/i.test(mainHtml)) {
@@ -117,7 +145,6 @@ app.post('/login', loginLimiter, async (req, res) => {
 
     // If the attendance page never loaded real data, the login didn't truly succeed → invalid.
     if (!dump || /invalid\s*details/i.test(attendanceHtml) || !/Roll No:/i.test(dump)) {
-      console.log(`[${new Date().toISOString()}] ROLL ${roll.toUpperCase()} → invalid details`);
       return res.json({ success: false, message: 'Invalid details. Please check your roll number.' });
     }
 
@@ -179,14 +206,27 @@ app.post('/login', loginLimiter, async (req, res) => {
     CACHE.set(roll.toUpperCase(), { at: Date.now(), data: result });
     return res.json(result);
   } catch (err) {
-    console.error("[/login] scraper error:", err);
+    // Axios errors contain credentials in request bodies/URLs; never log them.
+    console.error('[/login] attendance portal request failed:', err.code || err.name);
     return res.json({ success: false, message: "Could not reach the attendance portal. Please try again." });
   }
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled request error:', err.code || err.name);
+  if (res.headersSent) return next(err);
+  const malformed = err.type === 'entity.parse.failed';
+  res.status(malformed ? 400 : 500).json({ success: false, message: 'Something went wrong.' });
 });
 
 const PORT = process.env.PORT || 5000;
 const { initDb } = require('./chat');
 const { initReyiDb } = require('./reyi');
-Promise.all([initDb(), initReyiDb()])
-  .then(() => app.listen(PORT, () => console.log('✅ Server running on port ' + PORT)))
-  .catch(err => { console.error('❌ DB init failed, refusing to start:', err.message); process.exit(1); });
+async function start() {
+  await Promise.all([initDb(), initReyiDb()]);
+  return app.listen(PORT, () => console.log('Server running on port ' + PORT));
+}
+if (require.main === module) {
+  start().catch(err => { console.error('DB init failed, refusing to start:', err.code || err.name); process.exit(1); });
+}
+module.exports = { app, start };
