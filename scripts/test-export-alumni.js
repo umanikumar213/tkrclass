@@ -65,6 +65,7 @@ async function main() {
   let photos = 0;
   let networkDrops = 0;
   let loginPageRequests = 0;
+  let incompleteResponses = 0;
   const server = http.createServer(async (req, res) => {
     if (req.url === '/portal/' && req.method === 'GET') {
       loginPageRequests++;
@@ -81,14 +82,18 @@ async function main() {
       assert.equal(data.get('password'), submittedRoll);
       assert.equal(data.get('csrf'), 'fixture');
       if (mode === 'invalid' || (mode === 'mixed' && submittedRoll === '99K91A0002')) { res.end('<script>alert("Invalid Details")</script>'); return; }
-      res.setHeader('Set-Cookie', 'fixture_session=one; Path=/');
+      res.setHeader('Set-Cookie', ['fixture_session=one; Path=/', `fixture_roll=${submittedRoll}; Path=/`]);
       res.end('<script>document.location="MainFrameset.php";</script>');
     } else if (req.url === '/portal/MainFrameset.php') {
       assert.ok(req.headers.cookie.includes('fixture_session=one'));
       res.end('<frame src="StudentInformationForStudent.php">');
     } else if (req.url === '/portal/StudentInformationForStudent.php') {
       assert.ok(req.headers.cookie.includes('fixture_session=one'));
-      res.end(html);
+      const requestedRoll = req.headers.cookie.match(/fixture_roll=([A-Z0-9]+)/)[1];
+      if ((mode === 'incomplete' && requestedRoll === '99K91A0002') || incompleteResponses > 0) {
+        if (incompleteResponses > 0) incompleteResponses--;
+        res.end(`<body>Roll No: ${requestedRoll}\n</body>`);
+      } else res.end(html.replace(roll, requestedRoll));
     } else if (req.url === '/photo.jpg') {
       photos++; res.end('not fetched');
     } else { res.writeHead(404); res.end(); }
@@ -175,7 +180,29 @@ async function main() {
     await runExport(['99K91A0002', roll], { ...config, output: retryOutput, delay: 0, retryDelay: 0 });
     failures = JSON.parse(await fs.readFile(path.join(retryOutput, 'network-failures.json'), 'utf8'));
     assert.deepEqual(failures, []);
-    console.log('PASS: network retry recovery; exhausted retry logs and continues; network failures revisited on resume; no retry on Invalid Details or blocking; profile repair; CSV lock recovery.');
+    mode = 'success';
+    incompleteResponses = 1;
+    requestsBefore = loginPageRequests;
+    assert.deepEqual(await collectWithRetry(roll, { ...config, retryDelay: 0 }), parsed);
+    assert.equal(loginPageRequests - requestsBefore, 2);
+    mode = 'incomplete';
+    const partialOutput = path.join(output, 'incomplete-test');
+    await runExport(['99K91A0002', roll], { ...config, output: partialOutput, delay: 0, retryDelay: 0 });
+    const partials = JSON.parse(await fs.readFile(path.join(partialOutput, 'incomplete-profiles.json'), 'utf8'));
+    assert.equal(partials[0].roll_number, '99K91A0002');
+    assert.equal(partials[0].attempts, 2);
+    assert.deepEqual(partials[0].missing_fields, ['name', 'course', 'section', 'year']);
+    let completeRows = JSON.parse(await fs.readFile(path.join(partialOutput, 'students.json'), 'utf8'));
+    assert.equal(completeRows.length, 1);
+    assert.equal(completeRows[0].roll_number, roll);
+    mode = 'success';
+    const beforeRepair = logins;
+    await runExport(['99K91A0002', roll], { ...config, output: partialOutput, delay: 0, retryDelay: 0 });
+    assert.equal(logins - beforeRepair, 1);
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(partialOutput, 'incomplete-profiles.json'), 'utf8')), []);
+    completeRows = JSON.parse(await fs.readFile(path.join(partialOutput, 'students.json'), 'utf8'));
+    assert.equal(completeRows.length, 2);
+    console.log('PASS: incomplete-profile retry/recovery, review logging, continuation, resume; optional contact fields; network retry safeguards; CSV recovery.');
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));

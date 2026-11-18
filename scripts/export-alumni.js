@@ -209,10 +209,22 @@ async function collectStudent(roll, config) {
 }
 
 async function collectWithRetry(roll, config, shouldStop = () => false) {
+  async function attempt() {
+    const row = await collectStudent(roll, config);
+    const missing = REQUIRED_FIELDS.filter(field => !row[field]);
+    if (missing.length) {
+      const error = new Error(`Profile is missing ${missing.join(', ')}.`);
+      error.code = 'INCOMPLETE_PROFILE';
+      error.row = row;
+      error.missing = missing;
+      throw error;
+    }
+    return row;
+  }
   try {
-    return await collectStudent(roll, config);
+    return await attempt();
   } catch (error) {
-    if (error.code !== 'TEMPORARY_NETWORK') throw error;
+    if (!['TEMPORARY_NETWORK', 'INCOMPLETE_PROFILE'].includes(error.code)) throw error;
     const waitMs = config.retryDelay ?? 60000;
     console.warn(`${error.message} Waiting ${waitMs / 1000} seconds before one retry…`);
     const until = Date.now() + waitMs;
@@ -220,7 +232,7 @@ async function collectWithRetry(roll, config, shouldStop = () => false) {
     if (shouldStop()) return null;
     console.log('Retrying the same input entry (attempt 2 of 2)…');
     // Fresh cookies and login form after reconnecting; never reuse a partial session.
-    return collectStudent(roll, config);
+    return attempt();
   }
 }
 
@@ -234,7 +246,7 @@ async function writePrivate(file, content) {
 async function main() {
   const config = options(process.argv.slice(2));
   if (config.help) {
-    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 0] [--request-delay-ms 2000]');
+    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 10000] [--request-delay-ms 2000]');
     return;
   }
   if (!config.rolls) throw new Error('Provide --rolls FILE. See scripts/ALUMNI-EXPORT.md.');
@@ -300,6 +312,17 @@ async function runExport(rolls, config) {
     networkFailures = networkFailures.filter(row => row.roll_number !== roll);
     await writePrivate(networkFile, JSON.stringify(networkFailures, null, 2));
   }
+  const incompleteFile = path.join(output, 'incomplete-profiles.json');
+  let incomplete = [];
+  try {
+    incomplete = JSON.parse(await fs.readFile(incompleteFile, 'utf8'));
+    if (!Array.isArray(incomplete) || incomplete.some(row => typeof row.roll_number !== 'string')) throw new Error('Invalid review log.');
+  } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read incomplete-profiles.json; preserve it and choose a new --output directory.'); }
+  async function clearIncomplete(roll) {
+    if (!incomplete.some(row => row.roll_number === roll)) return;
+    incomplete = incomplete.filter(row => row.roll_number !== roll);
+    await writePrivate(incompleteFile, JSON.stringify(incomplete, null, 2));
+  }
   const completed = new Set(rows.map(row => row.roll_number));
   const skippedRolls = new Set(skipped.map(row => row.roll_number));
   await syncCsv(); // Rebuild even when all input entries have already been handled.
@@ -318,6 +341,16 @@ async function runExport(rolls, config) {
       row = await collectWithRetry(roll, config, () => stopping);
       if (!row) break;
     } catch (error) {
+      if (error.code === 'INCOMPLETE_PROFILE') {
+        const entry = { ...error.row, missing_fields: error.missing, attempts: 2 };
+        incomplete = incomplete.filter(row => row.roll_number !== roll);
+        incomplete.push(entry);
+        await writePrivate(incompleteFile, JSON.stringify(incomplete, null, 2));
+        await writePrivate(path.join(output, 'needs-review.json'), JSON.stringify(entry, null, 2));
+        console.warn(`Input entry ${index + 1} is still incomplete. Logged in incomplete-profiles.json; moving to the next entry.`);
+        if (!stopping && index < rolls.length - 1) await sleep(config.delay);
+        continue;
+      }
       if (error.code === 'TEMPORARY_NETWORK') {
         networkFailures = networkFailures.filter(entry => entry.roll_number !== roll);
         networkFailures.push({ roll_number: roll, reason: error.message, attempts: 2 });
@@ -331,19 +364,16 @@ async function runExport(rolls, config) {
       await writePrivate(skippedFile, JSON.stringify(skipped, null, 2));
       skippedRolls.add(roll);
       await clearNetworkFailure(roll);
+      await clearIncomplete(roll);
       console.log(`Skipped input entry ${index + 1}: Invalid Details. Recorded in skipped-rolls.json.`);
       if (!stopping && index < rolls.length - 1) await sleep(config.delay);
       continue;
-    }
-    const missing = REQUIRED_FIELDS.filter(field => !row[field]);
-    if (missing.length) {
-      await writePrivate(path.join(output, 'needs-review.json'), JSON.stringify({ ...row, missing_fields: missing }, null, 2));
-      throw new Error(`Profile is missing ${missing.join(', ')}. Partial record saved to needs-review.json; stopped rather than inventing values. A college-approved profile page or parser adjustment may be needed.`);
     }
     rows.push(row);
     // JSON is the canonical checkpoint; CSV is rebuilt from it, also on resume.
     await writePrivate(checkpoint, JSON.stringify(rows, null, 2));
     await clearNetworkFailure(roll);
+    await clearIncomplete(roll);
     await syncCsv();
     completed.add(roll);
     if (!stopping && index < rolls.length - 1) await sleep(config.delay);
@@ -353,6 +383,8 @@ async function runExport(rolls, config) {
   if (csvLocked) console.warn('students.json is current, but students.csv is not. Close Excel and rerun to refresh the CSV.');
   const unresolved = networkFailures.filter(row => rolls.includes(row.roll_number) && !completed.has(row.roll_number) && !skippedRolls.has(row.roll_number)).length;
   if (unresolved) console.warn(`${unresolved} entries remain uncollected due to network failures. See network-failures.json. Rerun the same command to try them again.`);
+  const reviewCount = incomplete.filter(row => rolls.includes(row.roll_number) && !completed.has(row.roll_number) && !skippedRolls.has(row.roll_number)).length;
+  if (reviewCount) console.warn(`${reviewCount} incomplete profiles need review. See incomplete-profiles.json; they will be tried again on the next run.`);
   } finally {
     process.removeListener('SIGINT', stop);
   }
