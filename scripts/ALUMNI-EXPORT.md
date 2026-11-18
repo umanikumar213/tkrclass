@@ -27,7 +27,7 @@ Validate the list without contacting the portal:
 node scripts/export-alumni.js --rolls generated-artifacts/rolls.txt --dry-run
 ```
 
-Start with **one authorized roll number** to confirm that the portal exposes all five fields:
+Start with **one authorized roll number** to confirm that the portal exposes the five required profile fields and check any optional contact fields:
 
 ```bash
 node scripts/export-alumni.js --rolls generated-artifacts/rolls.txt --allow-http
@@ -45,13 +45,17 @@ Only use `--allow-http` on the trusted college network if HTTP is the college-ap
 
 Default output directory: `generated-artifacts/alumni/`
 
-- `students.csv`: Excel-compatible CSV with **name, roll_number, course, section, year**.
-- `students.json`: the same five fields, used as the resume checkpoint.
+- `students.csv`: Excel-compatible CSV with **name, roll_number, course, section, year, student_mobile, father_name**.
+- `students.json`: the same seven fields, used as the resume checkpoint.
 - `skipped-rolls.json`: roll numbers where the portal explicitly returned **Invalid Details**, with that reason. These are skipped automatically on resume too.
 - `network-failures.json`: entries that failed both the initial attempt and the 60-second retry. They are skipped for the current run, but automatically tried again when you rerun the same command. Resolved entries are removed from this log.
 - `needs-review.json`: a partial record and missing field names, only if a profile lacks required details.
 
-The script does not download photos, contact details, attendance, or raw HTML files. It must read the existing student page in memory to extract the allowed fields. Values are read from labeled portal fields, never inferred from the roll number. The course field accepts portal labels such as Course, Programme, or Branch; confirm the college's wording using the first exported record.
+The script collects only the seven listed fields, not photos, parent phone numbers, email, attendance, or raw HTML files. It must read the existing student page in memory to extract the allowed fields. Values are read from labeled portal fields, never inferred from the roll number. The course field accepts portal labels such as Course, Programme, or Branch; confirm the college's wording using the first exported record.
+
+**Student mobile and father's name are optional.** Missing/unavailable values stay blank and do not stop the run. Only explicit student-specific phone labels (such as `Student Mobile`) are accepted; a generic Mobile or Father Mobile field is not substituted. Phone values remain strings in JSON, preserving leading zeroes and formatting. When importing CSV into Excel, set `student_mobile` to Text to avoid Excel's automatic number conversion.
+
+Existing five-field checkpoints are backed up automatically before the two blank columns are added. Already saved students are still skipped; they are not logged into again to backfill these details. New students receive the extra values when present. Keep these contact details private and use them only for college-approved purposes; do not publish the contact fields on a public alumni directory.
 
 Rerun the same command to skip completed students and previously recorded Invalid Details entries. Keep the same output directory for the same alumni export only. To retry a skipped roll after the college corrects it, close the script, back up `skipped-rolls.json`, and remove only that entry using a JSON-aware editor.
 
@@ -105,7 +109,7 @@ You do not need to start the website, install PostgreSQL, or copy any deployment
 
    This flag permits the existing unencrypted HTTP portal. Use only on the trusted approved network. If given an HTTPS portal URL, use `--base-url https://COLLEGE-HOST/TKRCET/` instead of `--allow-http`.
 
-9. Open `C:\AlumniExport\generated-artifacts\alumni\students.csv` in Excel. Check the first record, especially Course, Section, and Year, before adding the full approved list to `rolls.txt` and running the same command again.
+9. Open `C:\AlumniExport\generated-artifacts\alumni\students.csv` in Excel after stopping the script. Check the first record, especially Course, Section, Year and the optional Student Mobile/Father Name fields, before adding the full approved list to `rolls.txt` and running the same command again.
 10. Invalid Details entries go to `skipped-rolls.json`; the next roll is processed automatically. Completed and skipped entries are remembered on later runs. Keep the laptop awake and connected. Ctrl+C stops after saving the current attempt.
 
 If Windows says `node is not recognized`, reopen Command Prompt after installation. If `Cannot find module` appears, run the dependency installation command from `C:\AlumniExport` again. If the script cannot find `rolls.txt`, check the filename and that Command Prompt is open in the correct folder.

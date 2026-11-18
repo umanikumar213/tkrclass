@@ -11,7 +11,7 @@ async function main() {
   const html = `<html><body><table>
     <tr><td>Student Name:</td><td>Test Student</td><td>Roll No:</td><td>${roll}</td></tr>
     <tr><td>Course:</td><td>B.Tech</td><td>Section:</td><td>A</td></tr>
-    <tr><td>Year of Study:</td><td>IV</td><td>Father Name:</td><td>Do not export</td></tr>
+    <tr><td>Year of Study:</td><td>IV</td><td>Father Name:</td><td>Test Parent</td></tr>
     </table><p>Email: private@example.invalid</p><img src="/photo.jpg"></body></html>`;
   assert.deepEqual(readRolls(`\uFEFF# approved list\n${roll}\n${roll.toLowerCase()}\n`), [roll]);
   assert.throws(() => readRolls('bad-entry'));
@@ -32,7 +32,7 @@ async function main() {
   assert.throws(() => options(['--delay-ms', 'NaN']));
   assert.throws(() => options(['--request-delay-ms', '0']));
   const parsed = parseProfile(html, roll);
-  assert.deepEqual(parsed, { name: 'Test Student', roll_number: roll, course: 'B.Tech', section: 'A', year: 'IV' });
+  assert.deepEqual(parsed, { name: 'Test Student', roll_number: roll, course: 'B.Tech', section: 'A', year: 'IV', student_mobile: '', father_name: 'Test Parent' });
   assert.throws(() => parseProfile(html, '99K91A0002'), /does not match/);
   const missing = parseProfile(`<body>Name: Test Student\nRoll No: ${roll}\n</body>`, roll);
   assert.equal(missing.section, '');
@@ -45,6 +45,18 @@ async function main() {
   assert.equal(profileValues.year, 'B.Tech. V Semester (R22)');
   assert.equal(profileValues.course, 'B.Tech. (CD)');
   assert.equal(profileValues.name, 'Test Student');
+  const withContact = inlineProfile.replace('</body>',
+    '<div><b>Student Mobile:</b> 0123456789 <b>Father Mobile:</b> 0987654321</div></body>');
+  assert.equal(parseProfile(withContact, roll).student_mobile, '0123456789');
+  const onlyParentPhone = inlineProfile.replace('</body>',
+    '<div><b>Father Mobile:</b> 0987654321</div></body>');
+  assert.equal(parseProfile(onlyParentPhone, roll).student_mobile, '');
+  const emptyContact = inlineProfile.replace('</body>',
+    '<div><b>Student Mobile:</b> <b>Father Mobile:</b> 0987654321</div></body>');
+  assert.equal(parseProfile(emptyContact, roll).student_mobile, '');
+  const noContact = parseProfile(`<body>Roll No: ${roll}\nName: Test Student\nStudent Mobile: N/A\nFather Name: -\n</body>`, roll);
+  assert.equal(noContact.student_mobile, '');
+  assert.equal(noContact.father_name, '');
   const headingsOnly = parseProfile(`<body>Roll No: ${roll}\n<table><tr><td>Section</td><td>Status</td><td>Year</td><td>Semester</td></tr></table></body>`, roll);
   assert.equal(headingsOnly.section, '');
   assert.equal(headingsOnly.year, '');
@@ -104,6 +116,14 @@ async function main() {
     const beforeResume = logins;
     await runExport(['99K91A0002', roll], { ...config, output, delay: 0 });
     assert.equal(logins, beforeResume);
+    const legacy = { name: 'Saved Student', roll_number: roll, course: 'B.Tech', section: 'A', year: 'IV' };
+    await fs.writeFile(path.join(output, 'students.json'), JSON.stringify([legacy]));
+    await runExport([roll], { ...config, output, delay: 0 });
+    assert.equal(logins, beforeResume); // Adding columns must not re-login for existing students.
+    const migrated = JSON.parse(await fs.readFile(path.join(output, 'students.json'), 'utf8'));
+    assert.deepEqual(migrated[0], { ...legacy, student_mobile: '', father_name: '' });
+    assert.ok((await fs.readdir(output)).some(file => file.startsWith('students-before-columns-')));
+    assert.ok((await fs.readFile(path.join(output, 'students.csv'), 'utf8')).includes('"student_mobile","father_name"'));
     // Simulate the old bad checkpoint and a Windows CSV lock without student portal traffic.
     const damaged = { ...parsed, section: 'Status', year: 'Semester' };
     await fs.writeFile(path.join(output, 'students.json'), JSON.stringify([damaged]));

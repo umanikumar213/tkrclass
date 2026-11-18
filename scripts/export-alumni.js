@@ -9,13 +9,17 @@ const cheerio = require('cheerio');
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
 
-const FIELDS = ['name', 'roll_number', 'course', 'section', 'year'];
+const REQUIRED_FIELDS = ['name', 'roll_number', 'course', 'section', 'year'];
+const OPTIONAL_FIELDS = ['student_mobile', 'father_name'];
+const FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
 const ALIASES = {
   name: ['student name', 'name of the student', 'name'],
   roll_number: ['roll no', 'roll number', 'rollno', 'hall ticket no', 'hall ticket number', 'ht no'],
   course: ['course', 'course name', 'programme', 'program', 'branch', 'branch name'],
   section: ['section', 'sec'],
   year: ['year', 'study year', 'year of study', 'current year'],
+  student_mobile: ['student mobile', 'student mobile no', 'student mobile number', 'student phone', 'student phone number'],
+  father_name: ['father name', "father's name", 'fathers name', 'name of father'],
 };
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const labelKey = value => clean(value).toLowerCase().replace(/[.:：]+$/g, '').trim();
@@ -49,9 +53,14 @@ function parseProfile(html, expectedRoll) {
   $('script,style,noscript').remove();
   const result = Object.fromEntries(FIELDS.map(field => [field, '']));
   const headings = /^(status|semester|section|year|course|branch|name|roll no|roll number|attendance|s\.?no\.?)[:.]?$/i;
-  // Read only labeled values. Do not collect photos, attendance or contact details.
+  // Collect only approved labeled profile fields, never parent phone numbers or photos.
   function setValue(field, value) {
     const text = clean(value).replace(/^[:：]\s*/, '');
+    if (OPTIONAL_FIELDS.includes(field) && /^(?:[-–—]+|n\/?a|nil|null|none|not available|not provided)$/i.test(text)) return;
+    if (field === 'student_mobile') {
+      const digits = text.replace(/\D/g, '');
+      if (!/^\+?[\d\s().-]+$/.test(text) || digits.length < 7 || digits.length > 15 || /^0+$/.test(digits)) return;
+    }
     if (field && text && !labelField(text) && !headings.test(text) && !result[field]) result[field] = text;
   }
   // Prefer explicitly labeled profile text over unrelated table column headings.
@@ -62,7 +71,7 @@ function parseProfile(html, expectedRoll) {
   const labels = Object.values(ALIASES).flat().sort((a, b) => b.length - a.length);
   const escaped = labels.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const bodyText = profile.text().replace(/\r/g, '');
-  const regex = new RegExp(`(?:^|[\\s])(${escaped})\\s*[:：]\\s*([^\\n]*?)(?=\\s+(?:${escaped}|father(?:'s)? name|mother(?:'s)? name|gender|date of birth|semester|mobile|email)\\s*[:：]|\\n|$)`, 'gi');
+  const regex = new RegExp(`(?:^|[\\s])(${escaped})\\s*[:：]\\s*([^\\n]*?)(?=\\s+(?:${escaped}|father(?:'s)? (?:mobile|phone)(?: number| no)?|mother(?:'s)? (?:name|mobile|phone)(?: number| no)?|parent (?:mobile|phone)(?: number| no)?|gender|date of birth|semester|mobile|email)\\s*[:：]|\\n|$)`, 'gi');
   for (const match of bodyText.matchAll(regex)) setValue(labelField(match[1]), match[2]);
   $('tr').each((_, tr) => {
     const cells = $(tr).children('td,th');
@@ -91,7 +100,7 @@ function parseProfile(html, expectedRoll) {
 }
 
 function options(argv) {
-  const out = { base: 'http://103.171.190.44/TKRCET/', delay: 10000, requestDelay: 2000, output: 'generated-artifacts/alumni', allowHttp: false };
+  const out = { base: 'http://103.171.190.44/TKRCET/', delay: 0, requestDelay: 2000, output: 'generated-artifacts/alumni', allowHttp: false };
   const values = { '--rolls': 'rolls', '--base-url': 'base', '--output': 'output', '--delay-ms': 'delay', '--request-delay-ms': 'requestDelay' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -103,7 +112,7 @@ function options(argv) {
   }
   for (const key of ['delay', 'requestDelay']) {
     out[key] = Number(out[key]);
-    if (!Number.isFinite(out[key]) || out[key] < (key === 'delay' ? 5000 : 1000)) throw new Error('Use at least 5000ms between students and 1000ms between HTTP requests.');
+    if (!Number.isFinite(out[key]) || out[key] < (key === 'delay' ? 0 : 1000)) throw new Error('Student delay must be zero or greater; use at least 1000ms between HTTP requests.');
   }
   return out;
 }
@@ -225,7 +234,7 @@ async function writePrivate(file, content) {
 async function main() {
   const config = options(process.argv.slice(2));
   if (config.help) {
-    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 10000] [--request-delay-ms 2000]');
+    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 0] [--request-delay-ms 2000]');
     return;
   }
   if (!config.rolls) throw new Error('Provide --rolls FILE. See scripts/ALUMNI-EXPORT.md.');
@@ -253,8 +262,16 @@ async function runExport(rolls, config) {
   let rows = [];
   try {
     rows = JSON.parse(await fs.readFile(checkpoint, 'utf8'));
-    if (!Array.isArray(rows) || rows.some(row => FIELDS.some(field => typeof row[field] !== 'string'))) throw new Error('Invalid checkpoint.');
+    if (!Array.isArray(rows) || rows.some(row =>
+      REQUIRED_FIELDS.some(field => typeof row[field] !== 'string')
+      || OPTIONAL_FIELDS.some(field => row[field] !== undefined && typeof row[field] !== 'string'))) throw new Error('Invalid checkpoint.');
   } catch (error) { if (error.code !== 'ENOENT') throw new Error('Cannot read checkpoint; preserve it and choose a new --output directory.'); }
+  if (rows.some(row => OPTIONAL_FIELDS.some(field => row[field] === undefined))) {
+    await writePrivate(path.join(output, `students-before-columns-${Date.now()}.json`), JSON.stringify(rows, null, 2));
+    rows = rows.map(row => ({ ...row, student_mobile: row.student_mobile ?? '', father_name: row.father_name ?? '' }));
+    await writePrivate(checkpoint, JSON.stringify(rows, null, 2));
+    console.log('Existing records preserved with blank mobile/father-name columns. No backfill logins requested.');
+  }
   // Old parser versions could save attendance column headings as profile values.
   // Preserve those records in a backup and re-fetch only affected entries in this input list.
   const needsRepair = row => /^(status|semester)$/i.test(clean(row.section))
@@ -318,7 +335,7 @@ async function runExport(rolls, config) {
       if (!stopping && index < rolls.length - 1) await sleep(config.delay);
       continue;
     }
-    const missing = FIELDS.filter(field => !row[field]);
+    const missing = REQUIRED_FIELDS.filter(field => !row[field]);
     if (missing.length) {
       await writePrivate(path.join(output, 'needs-review.json'), JSON.stringify({ ...row, missing_fields: missing }, null, 2));
       throw new Error(`Profile is missing ${missing.join(', ')}. Partial record saved to needs-review.json; stopped rather than inventing values. A college-approved profile page or parser adjustment may be needed.`);
