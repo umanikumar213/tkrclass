@@ -23,7 +23,7 @@ function createTestLoader({ pool, axios, directory, timers, logs = [] }) {
     cache.set(filename, module);
     const originalRequire = createRequire(filename);
     function testRequire(name) {
-      if (name === './db') return pool;
+      if (name === './db' || name === '../db') return pool;
       if (name === 'axios') return axios;
       if (name === 'axios-cookiejar-support') return { wrapper: client => client };
       if (name === 'os') return { tmpdir: () => directory };

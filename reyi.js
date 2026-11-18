@@ -1,17 +1,13 @@
 const express = require('express');
-const multer = require('multer');
-const sharp = require('sharp');
 const pool = require('./db');
-const { safeEqual, parseCookies, ensureReactorIdentity, adminProtection, routeLimit, submissionGuard } = require('./security');
+const { ensureReactorIdentity, routeLimit, submissionGuard } = require('./security');
+const { adminProtection, clientIp, hasAdminSession, setAdminSession } = require('./lib/admin');
+const { createUpload, compressImage, removeTemporaryUploads, validateMp4, IMAGE_MAX_BYTES } = require('./lib/media');
+const { telegramConfig, sendVideoToTelegram, telegramFilePath, deleteTelegramMessage } = require('./lib/telegram');
+const { FeedCache, feedPage } = require('./lib/feed-cache');
 const { reactionHandler } = require('./reactions');
-const { validateMp4 } = require('./media-validation');
-const { deleteTelegramMessage } = require('./telegram-delete');
 const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
-const FormData = require('form-data');
-const fs = require('fs');
-const os = require('os');
 
 const router = express.Router();
 
@@ -19,52 +15,23 @@ const CATEGORIES = new Set(['Heartache', 'Nostalgia', 'Goosebumps', 'Midnight Th
 const REACTIONS = new Set(['heartache', 'pleading', 'goosebumps', 'hug', 'healing']);
 const REYI_PAGE_SIZE = 10;
 const REYI_CACHE_TTL = 300_000;
-const feedCache = new Map();
+const feedCache = new FeedCache(REYI_CACHE_TTL);
 const lastSubmission = new Map();
 const lastComment = new Map();
 const SUBMISSION_RATE_MS = 10 * 60 * 1000;
 const COMMENT_RATE_MS = 60 * 1000;
-const ADMIN_SESSION_MS = 30 * 60 * 1000;
-const TELEGRAM_FILE_PATH_CACHE_MS = 60 * 60 * 1000;
-const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
-const STORY_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const TEMP_UPLOAD_DIR = path.join(os.tmpdir(), 'reyi-uploads');
-const telegramFilePathCache = new Map();
-
-fs.mkdirSync(TEMP_UPLOAD_DIR, { recursive: true, mode: 0o700 });
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: TEMP_UPLOAD_DIR,
-    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname || '').toLowerCase()}`),
-  }),
-  limits: { fileSize: VIDEO_MAX_BYTES },
-  fileFilter: (req, file, cb) => {
-    const validStoryImage = file.fieldname === 'story_image' && ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
-    const validVideo = file.fieldname === 'video' && file.mimetype === 'video/mp4';
-    cb(validStoryImage || validVideo ? null : new Error('Use a JPG, PNG, WebP, or MP4 file.'), validStoryImage || validVideo);
-  },
-});
-
-function clientIp(req) {
-  return req.ip || req.socket.remoteAddress || 'unknown';
-}
+const upload = createUpload('reyi', 'story_image');
 
 function invalidateFeedCache() {
   feedCache.clear();
 }
 
 function getCachedFeed(key) {
-  const entry = feedCache.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) {
-    feedCache.delete(key);
-    return null;
-  }
-  return entry.payload;
+  return feedCache.get(key);
 }
 
 function setCachedFeed(key, payload) {
-  feedCache.set(key, { payload, expiresAt: Date.now() + REYI_CACHE_TTL });
+  feedCache.set(key, payload);
 }
 
 function getIstClock(now = new Date()) {
@@ -116,95 +83,6 @@ const streamLimit = routeLimit(60, 60000);
 const reportLimit = routeLimit(10, 3600000);
 const reactionLimit = routeLimit(30, 60000);
 
-function signAdminSession(timestamp) {
-  return crypto.createHmac('sha256', process.env.SESSION_SECRET).update(`reyi-admin:${timestamp}`).digest('base64url');
-}
-
-function hasAdminSession(req) {
-  if (!process.env.SESSION_SECRET) return false;
-  const token = parseCookies(req.headers.cookie).reyi_admin;
-  if (!token) return false;
-  const dot = token.lastIndexOf('.');
-  if (dot <= 0) return false;
-  const timestamp = Number(token.slice(0, dot));
-  const signature = token.slice(dot + 1);
-  if (!Number.isSafeInteger(timestamp) || timestamp + ADMIN_SESSION_MS < Date.now()) return false;
-  return safeEqual(signature, signAdminSession(timestamp));
-}
-
-function setAdminSession(req, res) {
-  if (!process.env.SESSION_SECRET) return;
-  const timestamp = Date.now();
-  const secure = req.secure ? '; Secure' : '';
-  res.append('Set-Cookie', `reyi_admin=${timestamp}.${signAdminSession(timestamp)}; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1000)}; Path=/; HttpOnly; SameSite=Strict${secure}`);
-}
-
-async function compressStoryImage(file) {
-  if (!file) return { data: null, type: null };
-  const input = file.buffer || await fs.promises.readFile(file.path);
-  const resize = { width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true };
-  if (file.mimetype === 'image/png') {
-    return { data: await sharp(input).rotate().resize(resize).png({ quality: 75, compressionLevel: 8 }).toBuffer(), type: 'image/png' };
-  }
-  if (file.mimetype === 'image/webp') {
-    return { data: await sharp(input).rotate().resize(resize).webp({ quality: 75 }).toBuffer(), type: 'image/webp' };
-  }
-  return { data: await sharp(input).rotate().resize(resize).jpeg({ quality: 75, mozjpeg: true }).toBuffer(), type: 'image/jpeg' };
-}
-
-function uploadedFiles(req) {
-  return Object.values(req.files || {}).flat();
-}
-
-async function removeTemporaryUploads(req) {
-  await Promise.all(uploadedFiles(req).map(file => fs.promises.unlink(file.path).catch(() => {})));
-}
-
-function telegramConfig() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const channelId = process.env.TELEGRAM_CHANNEL_ID;
-  if (!token || !channelId) {
-    throw new Error('Telegram video storage is not configured.');
-  }
-  return { token, channelId };
-}
-
-async function sendVideoToTelegram(file) {
-  const { token, channelId } = telegramConfig();
-  const form = new FormData();
-  form.append('chat_id', channelId);
-  form.append('video', fs.createReadStream(file.path), {
-    filename: path.basename(file.originalname || file.filename),
-    contentType: file.mimetype,
-  });
-  form.append('supports_streaming', 'true');
-  const response = await axios.post(`https://api.telegram.org/bot${token}/sendVideo`, form, {
-    headers: form.getHeaders(),
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-    timeout: 90_000,
-  });
-  const fileId = response.data?.result?.video?.file_id;
-  if (!response.data?.ok || !fileId) throw new Error('Telegram did not return a video file ID.');
-  return { fileId, messageId: response.data.result.message_id ?? null };
-}
-
-async function telegramFilePath(fileId) {
-  const cached = telegramFilePathCache.get(fileId);
-  if (cached && cached.expiresAt > Date.now()) return cached.filePath;
-  if (cached) telegramFilePathCache.delete(fileId);
-
-  const { token } = telegramConfig();
-  const response = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
-    params: { file_id: fileId },
-    timeout: 20_000,
-  });
-  const filePath = response.data?.result?.file_path;
-  if (!response.data?.ok || !filePath) throw new Error('Telegram could not resolve this video.');
-  telegramFilePathCache.set(fileId, { filePath, expiresAt: Date.now() + TELEGRAM_FILE_PATH_CACHE_MS });
-  return filePath;
-}
-
 setInterval(() => {
   const now = Date.now();
   for (const [ip, timestamp] of lastComment) {
@@ -212,9 +90,6 @@ setInterval(() => {
   }
   for (const [ip, timestamp] of lastSubmission) {
     if (now - timestamp > SUBMISSION_RATE_MS * 2) lastSubmission.delete(ip);
-  }
-  for (const [fileId, entry] of telegramFilePathCache) {
-    if (entry.expiresAt <= now) telegramFilePathCache.delete(fileId);
   }
 }, 10 * 60 * 1000).unref();
 
@@ -329,13 +204,13 @@ router.post('/api/reyi/posts', requireReyiOpen, submissionGuard(lastSubmission, 
         telegramMessageId = uploaded.messageId;
       } else {
         if (videoFile) return res.status(400).json({ success: false, message: 'Videos can only be attached to video posts.' });
-        if (storyImage && storyImage.size > STORY_IMAGE_MAX_BYTES) {
+        if (storyImage && storyImage.size > IMAGE_MAX_BYTES) {
           return res.status(400).json({ success: false, message: 'Images must be 5MB or smaller.' });
         }
         storyText = String(req.body.story_text || '').trim();
         if (!storyText) return res.status(400).json({ success: false, message: 'Write your story first.' });
         if (storyText.length > 2000) return res.status(400).json({ success: false, message: 'Stories must be 2000 characters or fewer.' });
-        ({ data: imageData, type: imageType } = await compressStoryImage(storyImage));
+        ({ data: imageData, type: imageType } = await compressImage(storyImage));
       }
 
       await pool.query(
@@ -360,7 +235,8 @@ router.post('/api/reyi/posts', requireReyiOpen, submissionGuard(lastSubmission, 
 
 router.get('/api/reyi/posts', requireReyiOpen, async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { page, beyondLimit } = feedPage(req.query.page);
+    if (beyondLimit) return res.json({ success: true, posts: [], hasMore: false, page });
     const category = CATEGORIES.has(req.query.category) ? req.query.category : '';
     const cacheKey = `p${page}|c${category || 'all'}`;
     const cached = getCachedFeed(cacheKey);
@@ -483,7 +359,7 @@ router.get('/api/reyi/stream/:fileId', streamLimit, mediaAccess, async (req, res
 });
 
 router.post('/api/reyi/posts/:id/react', requireReyiOpen, reactionLimit, reactionHandler({
-  pool, posts: 'reyi_posts', reactions: 'reyi_reactions', emojis: REACTIONS, invalidate: invalidateFeedCache,
+  pool, posts: 'reyi_posts', reactions: 'reyi_reactions', emojis: REACTIONS,
 }));
 
 router.get('/api/reyi/posts/:id/comments', requireReyiOpen, async (req, res) => {
@@ -656,6 +532,7 @@ router.post('/api/reyi/admin/reject-comment/:id', requireAdmin, async (req, res)
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await pool.query(`DELETE FROM reyi_comments WHERE id = $1 AND status = 'pending'`, [id]);
+    invalidateFeedCache();
     res.json({ success: true });
   } catch {
     res.status(500).json({ success: false, message: 'Could not reject comment.' });

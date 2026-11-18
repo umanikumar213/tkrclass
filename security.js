@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { rateLimit } = require('express-rate-limit');
 
-const clientIp = req => req.ip || req.socket?.remoteAddress || 'unknown';
+const clientIp = require('./lib/client-ip');
 function safeEqual(left, right) {
   if (typeof left !== 'string' || typeof right !== 'string') return false;
   const a = Buffer.from(left), b = Buffer.from(right);
@@ -42,59 +42,6 @@ function ensureReactorIdentity(req, res) {
   return crypto.createHash('sha256').update(id).digest('hex');
 }
 
-// All password-bearing routes, including media and both boards, share this lockout.
-const adminFailures = new Map();
-const WINDOW = 15 * 60 * 1000;
-function locked(ip) {
-  const state = adminFailures.get(ip);
-  if (state?.lockedUntil > Date.now()) return Math.ceil((state.lockedUntil - Date.now()) / 60000);
-  if (state && (state.lockedUntil || Date.now() - state.windowStart >= WINDOW)) adminFailures.delete(ip);
-  return null;
-}
-function recordFailure(ip) {
-  const now = Date.now();
-  const state = adminFailures.get(ip) || { count: 0, windowStart: now };
-  state.count++;
-  if (state.count >= 5) state.lockedUntil = now + WINDOW;
-  adminFailures.set(ip, state);
-}
-setInterval(() => { for (const ip of adminFailures.keys()) locked(ip); }, WINDOW).unref();
-function adminProtection(hasSession = () => false) {
-  function authenticate(req, res, publicMedia) {
-    const ip = clientIp(req);
-    const minutes = locked(ip);
-    if (minutes) {
-      res.status(429).json({ success: false, message: `Too many failed attempts. Try again in ${minutes} minute(s).` });
-      return null;
-    }
-    const password = req.headers['x-admin-password'];
-    if (password !== undefined) {
-      if (!isAdminPassword(password)) {
-        recordFailure(ip);
-        res.status(401).json({ success: false, message: 'Wrong password.' });
-        return null;
-      }
-      adminFailures.delete(ip);
-      return true;
-    }
-    if (hasSession(req)) { adminFailures.delete(ip); return true; }
-    if (publicMedia) return false; // Anonymous visitors do not consume password attempts.
-    if (!process.env.ADMIN_PASSWORD) {
-      res.status(500).json({ success: false, message: 'ADMIN_PASSWORD is not configured.' });
-    } else {
-      recordFailure(ip);
-      res.status(401).json({ success: false, message: 'Wrong password.' });
-    }
-    return null;
-  }
-  return {
-    requireAdmin(req, res, next) { if (authenticate(req, res, false) === true) next(); },
-    mediaAccess(req, res, next) {
-      const access = authenticate(req, res, true);
-      if (access !== null) { req.isMediaAdmin = access; next(); }
-    },
-  };
-}
 function routeLimit(limit, windowMs) {
   return rateLimit({
     windowMs, limit, standardHeaders: true, legacyHeaders: false,
@@ -114,4 +61,4 @@ function submissionGuard(entries, windowMs) {
     next();
   };
 }
-module.exports = { safeEqual, isAdminPassword, parseCookies, getReactorHash, ensureReactorIdentity, adminProtection, routeLimit, submissionGuard };
+module.exports = { safeEqual, isAdminPassword, parseCookies, getReactorHash, ensureReactorIdentity, routeLimit, submissionGuard };

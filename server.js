@@ -7,6 +7,7 @@ const { wrapper } = require('axios-cookiejar-support');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const { isPortalUrl, BoundedCache } = require('./attendance-security');
+const { parseAttendanceSummary } = require('./lib/attendance');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -57,6 +58,7 @@ const loginLimiter = rateLimit({
 });
 
 app.post('/login', loginLimiter, async (req, res) => {
+  let recentDays = [];
   const roll = typeof req.body?.rollNumber === 'string' ? req.body.rollNumber.trim().toUpperCase() : '';
   if (!/^[A-Z0-9]{8,12}$/.test(roll)) return res.status(400).json({ success: false, message: 'Enter a valid roll number.' });
 
@@ -152,16 +154,7 @@ app.post('/login', loginLimiter, async (req, res) => {
     const clean = s => (s || '').replace(/\s+/g, ' ').trim();
     const roll_no = (dump.match(/Roll No:\s*([A-Z0-9]+)/i) || [])[1] || roll;
     const name = clean((dump.match(/Name:\s*([^\n]+?)(?:\s{2,}|Father Name:|$)/i) || [])[1]) || '';
-    const totals = dump.match(/(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)%/);
-    const summary = totals ? { conducted: +totals[1], present: +totals[2], absent: +totals[3], percentage: totals[4] } : null;
-    const overall = summary ? summary.percentage : ((dump.match(/([\d.]+)%/) || [])[1] || '');
-
-    const subjAbbr = (dump.match(/Subject Abrevation([\s\S]*?)Cons\. Total/i) || [])[1] || '';
-    const subjects = subjAbbr.split('\n').map(clean).filter(Boolean);
-    const ratios = (dump.match(/Attendance\s*([\s\S]*?)\d+\s+\d+\s+\d+\s+[\d.]+%/i) || [])[1] || '';
-    const ratioList = (ratios.match(/\d+\/\d+|\b0\b/g) || []);
-    const perSubject = [];
-    for (let i = 0; i < Math.min(subjects.length, ratioList.length); i++) perSubject.push({ subject: subjects[i], attended: ratioList[i] });
+    const { summary, overall, perSubject } = parseAttendanceSummary(dump);
 
     let latestDay = null;
     let streak = 0;
@@ -189,7 +182,7 @@ app.post('/login', loginLimiter, async (req, res) => {
         });
 
         if (days.length) latestDay = days[0]; // table is newest-first (kept for compat)
-        var recentDays = days.slice(0, 7);   // up to last 7 days
+        recentDays = days.slice(0, 7);       // up to last 7 days
 
         // Streak: from newest day backwards, count days where EVERY real period is Present.
         // A single Absent period breaks it. Days with no marked periods (all dash) are skipped.

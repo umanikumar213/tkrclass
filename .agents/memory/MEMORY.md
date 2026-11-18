@@ -1,1 +1,1 @@
-- [Admin announcement scope](admin-announcements.md) — homepage notice is separate; admin-authored pinned posts belong only in the daytime Reyi feed.
+- [Admin announcement scope](admin-announcements.md) — admin pins belong only in the /chat confession board, separate from homepage notices and night-only /reyi.

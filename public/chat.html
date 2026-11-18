@@ -309,7 +309,7 @@ async function loadFeed(){
       loading=false;return;
     }
     if(currentPage===1&&!d.posts.length){
-      feed.innerHTML='<div class="empty">No Reyi posts '+(selectedMood?'with this mood':'yet')+'. Be the first 👀</div>';
+      feed.innerHTML='<div class="empty">No posts '+(selectedMood?'with this mood':'yet')+'. Be the first 👀</div>';
       loadMoreBtn.style.display='none';loading=false;return;
     }
     if(currentPage===1)feed.innerHTML='';

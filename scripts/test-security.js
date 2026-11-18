@@ -250,6 +250,7 @@ async function main() {
     errorHandler(new Error('sensitive internal detail'), {}, errorResponse, () => {});
     assert.equal(errorResponse.code, 500);
     assert.deepEqual(JSON.parse(JSON.stringify(errorResponse.body)), { success: false, message: 'Something went wrong.' });
+    await require('./test-performance-cases')({ load, pool, request, json, approved, night, admin });
     console.log('PASS: shared lockouts, signed transactional reactions/concurrency, upload reservations, MP4 validation, Telegram deletion/failure, additive migrations, headers/CORS/errors, attendance redirects/cache/input, and public rate limits.');
   } finally {
     for (const timer of timers) clearInterval(timer);

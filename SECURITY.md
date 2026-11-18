@@ -1,6 +1,6 @@
 # Security configuration
 
-The existing pages, moderation flow, Railway start command (`node server.js`), and database records are preserved. Startup migrations only add missing tables/columns/indexes; they do not reset reactions or rewrite/delete posts.
+The existing pages, moderation flow, Railway start command (`node server.js`), and database records are preserved. Startup setup adds missing tables/columns/indexes; it does not reset reactions or rewrite/delete posts. The text-column alteration is tracked once in `schema_migrations`, in a transaction with a cross-process advisory lock. Previously removed Reyi data-fix `UPDATE`/`DELETE` statements remain removed rather than being reintroduced.
 
 ## Environment
 

@@ -1,17 +1,14 @@
 const express = require('express');
-const multer = require('multer');
-const sharp = require('sharp');
 const pool = require('./db');
-const { adminProtection, ensureReactorIdentity, routeLimit, submissionGuard } = require('./security');
+const { ensureReactorIdentity, routeLimit, submissionGuard } = require('./security');
+const { adminProtection, clientIp } = require('./lib/admin');
+const { createUpload, compressImage, removeTemporaryUploads, validateMp4, IMAGE_MAX_BYTES } = require('./lib/media');
+const { telegramConfig, sendVideoToTelegram, telegramFilePath, deleteTelegramMessage } = require('./lib/telegram');
+const { FeedCache, feedPage } = require('./lib/feed-cache');
+const { runMigration } = require('./lib/migrations');
 const { reactionHandler } = require('./reactions');
-const { validateMp4 } = require('./media-validation');
-const { deleteTelegramMessage } = require('./telegram-delete');
 const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
-const FormData = require('form-data');
-const fs = require('fs');
-const os = require('os');
 
 const CHAT_MOODS = new Set([
   'Heartache',
@@ -21,41 +18,15 @@ const CHAT_MOODS = new Set([
   'Alone',
   'Other / Casual',
 ]);
-const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
-const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const TEMP_UPLOAD_DIR = path.join(os.tmpdir(), 'chat-uploads');
-const TELEGRAM_FILE_PATH_CACHE_MS = 60 * 60 * 1000;
-const STALE_UPLOAD_MS = 60 * 60 * 1000;
-const telegramFilePathCache = new Map();
-
-fs.mkdirSync(TEMP_UPLOAD_DIR, { recursive: true, mode: 0o700 });
-
-async function sweepStaleUploads() {
-  const entries = await fs.promises.readdir(TEMP_UPLOAD_DIR, { withFileTypes: true });
-  const cutoff = Date.now() - STALE_UPLOAD_MS;
-  await Promise.all(entries.filter(entry => entry.isFile()).map(async entry => {
-    const filePath = path.join(TEMP_UPLOAD_DIR, entry.name);
-    const stat = await fs.promises.stat(filePath).catch(() => null);
-    if (stat && stat.mtimeMs < cutoff) await fs.promises.unlink(filePath).catch(() => {});
-  }));
-}
-sweepStaleUploads().catch(error => console.error('[chat] stale upload cleanup error:', error.message));
-setInterval(() => {
-  sweepStaleUploads().catch(error => console.error('[chat] stale upload cleanup error:', error.message));
-}, 30 * 60 * 1000).unref();
-
 // --- feed cache (5-minute TTL, invalidated immediately on admin actions) ---
 const FEED_CACHE_TTL = 300_000; // 300 seconds in ms
-const feedCache = new Map();    // key → { data, expiresAt }
+const feedCache = new FeedCache(FEED_CACHE_TTL);
 function invalidateFeedCache() { feedCache.clear(); }
 function getFeedCache(key) {
-  const entry = feedCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) { feedCache.delete(key); return null; }
-  return entry.data;
+  return feedCache.get(key);
 }
 function setFeedCache(key, data) {
-  feedCache.set(key, { data, expiresAt: Date.now() + FEED_CACHE_TTL });
+  feedCache.set(key, data);
 }
 
 async function initDb() {
@@ -91,7 +62,6 @@ async function initDb() {
   `);
   await pool.query(`
     ALTER TABLE confessions
-      ALTER COLUMN text TYPE VARCHAR(2500),
       ADD COLUMN IF NOT EXISTS video_file_id TEXT,
       ADD COLUMN IF NOT EXISTS mood TEXT NOT NULL DEFAULT 'Other / Casual';
     ALTER TABLE confessions
@@ -108,6 +78,7 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_confessions_mood_approved
       ON confessions (mood, post_number DESC) WHERE status = 'approved';
   `);
+  await runMigration('chat_text_limit_2500', 'ALTER TABLE confessions ALTER COLUMN text TYPE VARCHAR(2500)');
   // Comments table – cascades with the parent post
   await pool.query(`
     CREATE TABLE IF NOT EXISTS confession_comments (
@@ -123,77 +94,7 @@ async function initDb() {
 }
 const router = express.Router();
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: TEMP_UPLOAD_DIR,
-    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname || '').toLowerCase()}`),
-  }),
-  limits: { fileSize: VIDEO_MAX_BYTES },
-  fileFilter: (req, file, cb) => {
-    const validImage = file.fieldname === 'image' && ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
-    const validVideo = file.fieldname === 'video' && file.mimetype === 'video/mp4';
-    cb(validImage || validVideo ? null : new Error('Use a JPG, PNG, WebP, or MP4 file.'), validImage || validVideo);
-  }
-});
-
-function uploadedFiles(req) {
-  return Object.values(req.files || {}).flat();
-}
-
-async function removeTemporaryUploads(req) {
-  await Promise.all(uploadedFiles(req).map(file => fs.promises.unlink(file.path).catch(() => {})));
-}
-
-async function compressImage(file) {
-  if (!file) return { data: null, type: null };
-  const input = await fs.promises.readFile(file.path);
-  const resize = { width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true };
-  if (file.mimetype === 'image/png') {
-    return { data: await sharp(input).rotate().resize(resize).png({ quality: 75, compressionLevel: 8 }).toBuffer(), type: 'image/png' };
-  }
-  if (file.mimetype === 'image/webp') {
-    return { data: await sharp(input).rotate().resize(resize).webp({ quality: 75 }).toBuffer(), type: 'image/webp' };
-  }
-  return { data: await sharp(input).rotate().resize(resize).jpeg({ quality: 75, mozjpeg: true }).toBuffer(), type: 'image/jpeg' };
-}
-
-function telegramConfig() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const channelId = process.env.TELEGRAM_CHANNEL_ID;
-  if (!token || !channelId) throw new Error('Telegram video storage is not configured.');
-  return { token, channelId };
-}
-
-async function sendVideoToTelegram(file) {
-  const { token, channelId } = telegramConfig();
-  const form = new FormData();
-  form.append('chat_id', channelId);
-  form.append('video', fs.createReadStream(file.path), {
-    filename: path.basename(file.originalname || file.filename),
-    contentType: file.mimetype,
-  });
-  form.append('supports_streaming', 'true');
-  const response = await axios.post(`https://api.telegram.org/bot${token}/sendVideo`, form, {
-    headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity, timeout: 90_000,
-  });
-  const fileId = response.data?.result?.video?.file_id;
-  if (!response.data?.ok || !fileId) throw new Error('Telegram did not return a video file ID.');
-  return { fileId, messageId: response.data.result.message_id ?? null };
-}
-
-async function telegramFilePath(fileId) {
-  const cached = telegramFilePathCache.get(fileId);
-  if (cached && cached.expiresAt > Date.now()) return cached.filePath;
-  if (cached) telegramFilePathCache.delete(fileId);
-  const { token } = telegramConfig();
-  const response = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
-    params: { file_id: fileId }, timeout: 20_000,
-  });
-  const filePath = response.data?.result?.file_path;
-  if (!response.data?.ok || !filePath) throw new Error('Telegram could not resolve this video.');
-  telegramFilePathCache.set(fileId, { filePath, expiresAt: Date.now() + TELEGRAM_FILE_PATH_CACHE_MS });
-  return filePath;
-}
+const upload = createUpload('chat', 'image');
 
 // --- rate limit: 1 post per 3 minutes per IP ---
 const lastPost = new Map();
@@ -202,9 +103,6 @@ setInterval(() => {
   const cutoff = Date.now() - RATE_MS;
   for (const [ip, t] of lastPost) if (t < cutoff) lastPost.delete(ip);
 }, 10 * 60 * 1000).unref();
-
-// req.ip respects Express "trust proxy" (set in server.js) and cannot be spoofed via arbitrary headers
-const clientIp = req => req.ip || req.socket.remoteAddress || 'unknown';
 
 const { requireAdmin, mediaAccess } = adminProtection();
 const imageLimit = routeLimit(120, 60000);
@@ -259,7 +157,7 @@ function submitPost(req, res, adminPost = false) {
             [text, imageData, imageType, videoFileId, mood, counter.rows[0].value, telegramMessageId]);
           await client.query('COMMIT');
           invalidateFeedCache();
-          res.json({ success: true, id: result.rows[0].id, message: 'Published and pinned to the Reyi feed until you remove it.' });
+          res.json({ success: true, id: result.rows[0].id, message: 'Published and pinned to the confession board until you remove it.' });
         } catch (error) {
           await client.query('ROLLBACK').catch(() => {});
           throw error;
@@ -298,7 +196,8 @@ router.get('/api/chat/posts', async (req, res) => {
   ensureReactorIdentity(req, res);
   try {
     const PAGE_SIZE = 10;
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { page, beyondLimit } = feedPage(req.query.page);
+    if (beyondLimit) return res.json({ success: true, posts: [], hasMore: false, page });
     const mood = CHAT_MOODS.has(req.query.mood) ? req.query.mood : '';
 
     const cacheKey = `p${page}|m${mood || 'all'}`;
@@ -384,14 +283,15 @@ router.get('/api/chat/stream/:fileId', streamLimit, mediaAccess, async (req, res
 
 const VALID_EMOJIS = new Set(['heart','laugh','wow','sad','fire','up']);
 router.post('/api/chat/posts/:id/react', reactionLimit, reactionHandler({
-  pool, posts: 'confessions', reactions: 'chat_reactions', emojis: VALID_EMOJIS, invalidate: invalidateFeedCache,
+  pool, posts: 'confessions', reactions: 'chat_reactions', emojis: VALID_EMOJIS,
 }));
 
 router.post('/api/chat/posts/:id/report', reportLimit, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
-    await pool.query(`UPDATE confessions SET reported = TRUE WHERE id = $1 AND status = 'approved'`, [id]);
+    const result = await pool.query(`UPDATE confessions SET reported = TRUE WHERE id = $1 AND status = 'approved' RETURNING id`, [id]);
+    if (!result.rows.length) return res.status(404).json({ success: false, message: 'Post not found.' });
     res.json({ success: true, message: 'Reported. An admin will review this post.' });
   } catch { res.status(500).json({ success: false }); }
 });
@@ -405,8 +305,9 @@ router.get('/api/chat/posts/:id/comments', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     const { rows } = await pool.query(
-      `SELECT id, text, created_at FROM confession_comments
-       WHERE confession_id = $1 AND status = 'approved' ORDER BY created_at ASC`, [id]);
+      `SELECT cc.id, cc.text, cc.created_at FROM confession_comments cc
+       JOIN confessions c ON c.id = cc.confession_id AND c.status = 'approved'
+       WHERE cc.confession_id = $1 AND cc.status = 'approved' ORDER BY cc.created_at ASC`, [id]);
     res.json({ success: true, comments: rows });
   } catch { res.status(500).json({ success: false }); }
 });
@@ -494,6 +395,7 @@ router.post('/api/chat/admin/unflag/:id', requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await pool.query(`UPDATE confessions SET reported = FALSE WHERE id = $1`, [id]);
+    invalidateFeedCache();
     res.json({ success: true });
   } catch { res.status(500).json({ success: false }); }
 });
@@ -526,6 +428,7 @@ router.post('/api/chat/admin/reject-comment/:id', requireAdmin, async (req, res)
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false });
     await pool.query(`DELETE FROM confession_comments WHERE id = $1`, [id]);
+    invalidateFeedCache();
     res.json({ success: true });
   } catch { res.status(500).json({ success: false, message: 'Reject failed.' }); }
 });

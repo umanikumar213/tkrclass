@@ -148,10 +148,12 @@ async function main() {
     await db.query(`UPDATE confessions SET created_at=NOW()-INTERVAL '90 days' WHERE id=$1`, [firstId]);
     const queue = await request('/api/chat/admin/queue', { headers: admin });
     assert.ok(queue.body.posts.some(p => p.id === firstId && p.is_pinned));
-    assert.equal((await request(`/api/chat/posts/${firstId}/react`, {
+    const reaction = await request(`/api/chat/posts/${firstId}/react`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji: 'heart', prev: null }),
-    })).status, 200);
-    assert.equal((await feed()).find(p => p.id === firstId).react_heart, 1);
+    });
+    assert.equal(reaction.status, 200);
+    assert.equal(reaction.body.counts.react_heart, 1);
+    assert.equal((await feed()).find(p => p.id === firstId).react_heart, 0); // reaction preserves feed cache
     assert.equal((await request(`/api/chat/posts/${firstId}/comments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Reply to admin' }),
     })).status, 200);
@@ -159,6 +161,7 @@ async function main() {
     assert.equal(comments.body.comments.length, 1);
     assert.equal((await request(`/api/chat/admin/approve-comment/${comments.body.comments[0].id}`,
       { method: 'POST', headers: admin })).status, 200);
+    assert.equal((await feed()).find(p => p.id === firstId).react_heart, 1); // moderation invalidates it
     // Exercise pagination with pinned items ahead of the regular feed, without duplicates.
     for (let i = 0; i < 11; i++) await db.query(
       `INSERT INTO confessions(text,status,post_number,mood) VALUES($1,'approved',$2,'Heartache')`, [`Page post ${i}`, 100 + i]);

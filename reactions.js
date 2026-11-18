@@ -1,7 +1,7 @@
 const { ensureReactorIdentity } = require('./security');
 
 // Names/columns come only from server-owned configuration, never from the request.
-function reactionHandler({ pool, posts, reactions, emojis, invalidate }) {
+function reactionHandler({ pool, posts, reactions, emojis }) {
   return async (req, res) => {
     const id = Number(req.params.id);
     const emoji = req.body?.emoji ?? null;
@@ -36,7 +36,6 @@ function reactionHandler({ pool, posts, reactions, emojis, invalidate }) {
       }
       const counts = await client.query(`SELECT ${[...emojis].map(e => `react_${e}`).join(',')} FROM ${posts} WHERE id=$1`, [id]);
       await client.query('COMMIT');
-      invalidate();
       res.set('Cache-Control', 'no-store');
       res.json({ success: true, emoji, counts: counts.rows[0] });
     } catch {
