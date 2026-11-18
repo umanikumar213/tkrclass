@@ -91,7 +91,7 @@ function parseProfile(html, expectedRoll) {
 }
 
 function options(argv) {
-  const out = { base: 'http://103.171.190.44/TKRCET/', delay: 0, requestDelay: 2000, output: 'generated-artifacts/alumni', allowHttp: false };
+  const out = { base: 'http://103.171.190.44/TKRCET/', delay: 10000, requestDelay: 2000, output: 'generated-artifacts/alumni', allowHttp: false };
   const values = { '--rolls': 'rolls', '--base-url': 'base', '--output': 'output', '--delay-ms': 'delay', '--request-delay-ms': 'requestDelay' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -103,7 +103,7 @@ function options(argv) {
   }
   for (const key of ['delay', 'requestDelay']) {
     out[key] = Number(out[key]);
-    if (!Number.isFinite(out[key]) || out[key] < (key === 'delay' ? 0 : 1000)) throw new Error('Student delay must be zero or greater; use at least 1000ms between HTTP requests.');
+    if (!Number.isFinite(out[key]) || out[key] < (key === 'delay' ? 5000 : 1000)) throw new Error('Use at least 5000ms between students and 1000ms between HTTP requests.');
   }
   return out;
 }
@@ -225,7 +225,7 @@ async function writePrivate(file, content) {
 async function main() {
   const config = options(process.argv.slice(2));
   if (config.help) {
-    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 0] [--request-delay-ms 2000]');
+    console.log('node scripts/export-alumni.js --rolls FILE [--dry-run] [--base-url URL] [--allow-http] [--output DIR] [--delay-ms 10000] [--request-delay-ms 2000]');
     return;
   }
   if (!config.rolls) throw new Error('Provide --rolls FILE. See scripts/ALUMNI-EXPORT.md.');
