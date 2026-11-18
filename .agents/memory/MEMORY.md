@@ -1,1 +1,0 @@
-- [Admin announcement scope](admin-announcements.md) — admin pins belong only in the /chat confession board, separate from homepage notices and night-only /reyi.

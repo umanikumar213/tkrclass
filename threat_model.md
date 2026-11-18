@@ -2,52 +2,61 @@
 
 ## Project Overview
 
-A Node.js/Express web application for TKR College students with two surfaces:
-1. **Attendance checker** (`/`) — students enter a roll number; the server scrapes the TKR college portal and returns attendance data.
-2. **Anonymous confession board** (`/chat`) — students submit text + optional image posts; an admin reviews and approves them before they appear publicly. Admin panel at `/chat/admin` is protected by a shared password (`ADMIN_PASSWORD` env var).
-
-Stack: Node.js, Express, PostgreSQL (Replit built-in), sharp for image processing, cheerio/axios for scraping. Not formally deployed (no Replit deployment active). Runs on port 5000.
+TKRClass is a Node.js 20 / Express application providing attendance lookup, an anonymous confession board, a separate night-only Reyi feed, and password-protected moderation. PostgreSQL stores content and reactions; Telegram stores video files. Route/file inventories and deployment configuration are in `replit.md`. This document describes the current controls and residual risks, not a security certification.
 
 ## Assets
 
-- **Admin password** — single shared secret (`ADMIN_PASSWORD`) granting full control over the confession board (approve, reject, delete posts). Compromise allows mass deletion or abuse of moderation.
-- **Confession content** — text and images submitted by students. Anonymous but still potentially sensitive (personal disclosures). Stored in PostgreSQL as `bytea`.
-- **Source code and configuration** — `server.js`, `chat.js`, `package.json`, `.replit`. Exposure reveals scraping logic, database schema, API routes, and admin API details.
-- **Student data from portal scraping** — roll number, name, attendance percentages, per-subject data. Short-lived in-memory cache (60s). Not persisted to DB.
+- **Secrets and privileged access:** `ADMIN_PASSWORD`, `SESSION_SECRET`, the database connection string, and Telegram credentials. Their compromise permits moderation abuse, identity/session forgery, data access, or video-storage abuse.
+- **Submitted content:** pending and approved posts, images, videos, and comments may contain sensitive personal disclosures. Moderation state and restricted media access must remain authoritative.
+- **Attendance data:** roll numbers, names, attendance and subject/day details cross the college boundary and enter a short-lived server cache; they are not persisted in PostgreSQL.
+- **Integrity and availability:** post numbering, reaction ownership/counters, moderation decisions, and the ability to reach the college portal, PostgreSQL, and Telegram.
 
 ## Trust Boundaries
 
-- **Browser to API** — all public API requests are untrusted. Admin API requires `x-admin-password` header but has no rate limiting.
-- **API to TKR portal** — server makes outbound HTTP requests to `http://103.171.190.44/TKRCET` using student-supplied roll numbers. The target is a fixed hardcoded URL, so no SSRF from user input.
-- **API to PostgreSQL** — direct internal connection. SSL verification is disabled (`rejectUnauthorized: false`).
-- **Public vs admin surface** — confession feed is public; admin queue/approve/reject require the shared password header.
+- **Browser ↔ Express:** all IDs, bodies, uploads, cookies, and reaction choices are untrusted. The server serves static files only from `public/`, not the repository root. Header authentication protects moderation; Reyi also accepts its signed admin cookie.
+- **Proxy ↔ Express:** `trust proxy` is set to one hop. IP-based protections and secure-cookie detection depend on the actual hosting proxy preventing client spoofing of the trusted forwarding position. Public traffic requires HTTPS termination at the host.
+- **Express ↔ college portal:** roll numbers are validated; form actions and redirects are constrained to the fixed portal host/path. The upstream portal uses unencrypted HTTP, so network interception remains possible. The browser separately requests profile photos over HTTPS from `tkrcet.in`.
+- **Express ↔ PostgreSQL:** parameterized values and a shared pool protect normal database operations. Hosted TLS certificate verification is disabled by default for compatibility; `DB_SSL_VERIFY=true` opts into verification with an appropriate trust chain.
+- **Express ↔ Telegram:** bot-token HTTPS requests upload, resolve, stream, and attempt deletion of video messages. Videos leave the application/database trust boundary and depend on the channel's access controls and Telegram's policies.
+- **Public ↔ moderation/night window:** pending content and admin publishing require server authorization. Public Reyi content operations are gated by the IST opening window; administrators can review outside it. The window is not a retention policy or a guarantee against recording previously viewed content.
 
 ## Scan Anchors
 
-- **Entry points**: `server.js` (POST /login for scraping, mounts chat router, serves static files), `chat.js` (all `/api/chat/*` and `/chat` page routes)
-- **Highest-risk areas**: `app.use(express.static('.'))` in `server.js`; admin auth in `requireAdmin()` in `chat.js`; CORS config
-- **Public surface**: GET /api/chat/posts, POST /api/chat/posts, GET /api/chat/image/:id, POST /api/chat/posts/:id/report
-- **Admin surface**: POST /api/chat/admin/login, GET /api/chat/admin/queue, POST /api/chat/admin/approve/:id, POST /api/chat/admin/reject/:id, POST /api/chat/admin/unflag/:id
-- **Dev-only**: none; entire codebase is production
+- Follow request paths from `server.js` into `chat.js` and `reyi.js`; inspect upload/stream handlers and all moderation mutations.
+- Review `lib/admin.js`, `security.js`, `reactions.js`, and `lib/media.js` for authentication, cookie validation, counter integrity, and file-processing boundaries.
+- Review `lib/telegram.js`, `db.js`, `lib/migrations.js`, `lib/attendance.js`, and `attendance-security.js` for external-service and migration risks.
+- `public/*-admin.html` contains browser-side credential handling. Regression scripts under `scripts/` use disposable schemas and simulated external transports; they are not HTTP routes and must not run against production.
 
 ## Threat Categories
 
-### Information Disclosure
+### Spoofing and elevation of privilege
 
-The most critical active issue: `app.use(express.static('.'))` serves the repository root, exposing `server.js`, `chat.js`, `package.json`, `package-lock.json`, `.replit`, and the `scripts/` directory over HTTP. Any user can read the full application source code. Error messages from scraping failures are forwarded verbatim to clients via `err.message`.
+Admin passwords use one shared timing-safe comparison. All password-bearing admin/media routes share a per-IP five-failure, 15-minute lockout; successful authentication clears failures. Anonymous media requests do not count as password failures. Both admin pages retain entered passwords only in JavaScript memory, not `sessionStorage` or `localStorage`; Reyi also issues a signed, 30-minute HttpOnly SameSite=Strict admin cookie. `SESSION_SECRET` actively signs that cookie and the shared visitor identity.
 
-### Spoofing / Elevation of Privilege
-
-The admin password (`x-admin-password` header) has no brute-force or rate-limiting protection. An attacker can try passwords indefinitely at high speed. The password is also stored in plaintext in `sessionStorage` in the admin browser client.
+Every privileged operation MUST enforce authorization server-side, independent of UI controls or multipart fields. A shared password provides no individual-admin attribution or MFA. Distributed attackers, process restarts, and multiple replicas weaken in-memory per-IP lockouts. Strong secrets, correct proxy configuration, and protected admin browsers remain essential.
 
 ### Tampering
 
-CORS is configured with `app.use(cors())` defaults, which sets `Access-Control-Allow-Origin: *` and allows all request headers. This means any origin can read API responses, including the confession feed and image blobs. Combining this with the exposed source code makes it trivial for a third party to build a scraper.
+Signed HttpOnly visitor cookies identify reaction ownership. Transactions lock the parent post, read the stored prior reaction, change one visitor/post record, and adjust counters without trusting client `prev` values. Counters must never become negative. This limits one reaction per cookie identity, not per real person: visitors can obtain another identity by clearing cookies.
 
-### Denial of Service
+SQL values MUST remain parameterized; dynamic table/emoji identifiers must come only from server-owned allow-lists. Ordinary submissions cannot grant themselves approval or admin pinning. Images are re-encoded with sharp; MP4 container structure is validated before upload. Container validation is not malware scanning or proof that a video decodes safely in every player.
 
-No rate limiting on the `/login` scraping endpoint — each request triggers an outbound HTTP session to the slow college portal (up to 30s timeout). A burst of requests from a single IP can exhaust server concurrency. The in-memory post rate limit (1 post/3min/IP) applies only to confession submissions.
+### Information disclosure and script injection
 
-### Cryptographic Failures
+Only approved posts/comments are public; pending media requires admin access. Media handlers must check authorization and status before consulting Telegram caches. Avatar values are assigned through DOM properties with encoded URL components. Displayed post/comment text must stay escaped.
 
-PostgreSQL SSL is configured with `rejectUnauthorized: false`, disabling certificate verification. If the database host certificate is forged (MITM), the connection proceeds without warning.
+Helmet supplies CSP and other headers. The policy allows required fonts/images/media and blocks framing, but intentionally permits inline scripts/handlers for the current HTML. An XSS flaw could still expose in-memory admin passwords or issue privileged requests; HttpOnly alone does not stop same-origin script abuse. CORS permits configured origins, same-origin traffic, and clients without Origin; it is not authentication or a defense against non-browser scraping.
+
+Unhandled errors return generic JSON and malformed JSON returns 400. Attendance errors log error type/code rather than roll numbers or credential-bearing Axios objects. Logs and all future error paths MUST avoid secrets, student data, and upstream request objects. Attendance lookup currently accepts a roll number rather than a verified student login, so knowledge of a valid roll number is sufficient to request its attendance.
+
+### Denial of service
+
+Current per-IP limits include attendance login at 5/minute, reactions at 30/minute per board, reports at 10/hour per board, image requests at 120/minute per board, and video requests at 60/minute per board. Post reservations are taken before uploads: one public chat post per three minutes or Reyi submission per ten minutes, with failed submissions released for retry. Comment submission limits also apply.
+
+Image/video size limits, timeouts, temporary-file cleanup, bounded attendance/feed caches, a feed-page ceiling, and expiring Telegram file paths constrain resource use. Reaction responses return current counts without invalidating entire feed caches; moderation invalidates them. These controls do not provide global concurrency or bandwidth quotas. IP rotation, shared NATs, native image processing, public feed/comment reads, and slow streaming remain availability concerns. Limits and caches are process-local and reset on restart.
+
+### Retention, deletion, and repudiation
+
+There is no automatic seven-day post purge. Admin deletion removes the database row and dependent comments/reactions, then attempts Telegram message deletion. Telegram refusal, missing message IDs on older posts, copied content, or third-party backups can leave media outside application control; deletion MUST NOT be represented as guaranteed erasure from all systems.
+
+Named one-time migrations run transactionally with an advisory lock and an applied-migration record. Previously removed Reyi data-repair UPDATE/DELETE statements are not reinstated at startup. Changes to migrations require review because they operate with database privileges. A shared admin credential and the lack of a dedicated per-action audit trail limit attribution of moderation decisions.
