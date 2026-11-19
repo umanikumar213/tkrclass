@@ -2,45 +2,9 @@
   'use strict';
 
   window.createSpotlightUI = function createSpotlightUI({ t, copyText }) {
-    const setupTheme = () => {
-      let stored = null;
-      try {
-        stored = localStorage.getItem('spotlight-theme');
-      } catch {
-        // Storage may be disabled by browser privacy settings.
-      }
-      const preferred = window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-      const initial = stored === 'dark' || stored === 'light' ? stored : preferred;
-      document.documentElement.dataset.theme = initial;
-
-      const syncMeta = (theme) => {
-        const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = theme === 'light' ? '#f4f3fa' : '#0b0b14';
-      };
-      syncMeta(initial);
-
-      document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
-        const paint = () => {
-          const theme = document.documentElement.dataset.theme || 'dark';
-          const targetTheme = t(theme === 'dark' ? 'theme_light_label' : 'theme_dark_label');
-          button.setAttribute('aria-label', copyText('theme_toggle_aria', { theme: targetTheme }));
-          button.setAttribute('aria-pressed', String(theme === 'light'));
-          button.querySelector('.sp-theme-icon')?.setAttribute('data-mode', theme);
-        };
-        button.disabled = false;
-        button.addEventListener('click', () => {
-          const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-          document.documentElement.dataset.theme = theme;
-          syncMeta(theme);
-          try {
-            localStorage.setItem('spotlight-theme', theme);
-          } catch {
-            // The selected theme still applies to this page.
-          }
-          paint();
-        });
-        paint();
-      });
+    const setupLight = () => {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = '#f4f3fa';
     };
 
     const confirm = (message, { title } = {}) => new Promise((resolve) => {
@@ -105,6 +69,6 @@
       });
     };
 
-    return { setupTheme, confirm, relativeTime };
+    return { setupLight, confirm, relativeTime };
   };
 })();

@@ -91,7 +91,7 @@
     svg.append(path);
     return svg;
   };
-  const makeAvatar = (student, large = false) => {
+  const makeAvatar = (student, large = false, size = large ? 120 : 72) => {
     const avatar = make('span', `sp-avatar${large ? ' sp-avatar-large' : ''}`, initials(student.name));
     const rollHash = String(student.roll_number || '').split('').reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 7);
     avatar.style.setProperty('--avatar-gradient', [
@@ -104,8 +104,8 @@
     ][rollHash % 6]);
     const image = document.createElement('img');
     image.alt = student.name || t('student_fallback');
-    image.width = large ? 112 : 180;
-    image.height = large ? 112 : 180;
+    image.width = size;
+    image.height = size;
     image.loading = 'lazy';
     image.decoding = 'async';
     image.src = `/api/spotlight/photo/${encodeURIComponent(student.roll_number)}`;
@@ -260,37 +260,78 @@
     let leaderRequestId = 0;
     let listObserver = null;
     let autoLoadBlocked = false;
-    const renderChipGroup = (label, items, value, onPick) => {
-      const group = make('div', 'sp-filter-group');
-      group.append(make('span', 'sp-filter-label', label));
-      const chips = make('div', 'sp-chips');
-      const options = [{ value: '', label: t('filter_all') }, ...items];
-      options.forEach((item) => {
-        const button = make('button', 'sp-chip', item.label);
-        button.type = 'button';
-        button.setAttribute('aria-pressed', String(item.value === value));
-        button.addEventListener('click', () => onPick(item.value));
-        chips.append(button);
-      });
-      group.append(chips);
-      return group;
-    };
     const renderFilters = () => {
       filtersBox.replaceChildren();
-      filtersBox.append(renderChipGroup(t('filter_year'), state.years.map((year) => ({ value: year, label: year })), state.year, (year) => {
-        state.year = year; state.course = ''; state.section = ''; state.page = 1; renderFilters(); loadStudents();
+      const yearRank = (year) => {
+        const match = String(year).match(/([1-4])/);
+        return match ? Number(match[1]) : 99;
+      };
+      const yearRow = make('div', 'sp-year-row');
+      yearRow.setAttribute('role', 'group');
+      yearRow.setAttribute('aria-label', t('filter_year'));
+      const years = [...new Set(state.years)].sort((a, b) => yearRank(a) - yearRank(b) || String(a).localeCompare(String(b)));
+      [{ value: '', rank: 0 }, ...[1, 2, 3, 4].map(rank => ({
+        value: years.find(year => yearRank(year) === rank),
+        rank,
+      }))].forEach((item) => {
+        const button = make('button', 'sp-year-button');
+        button.type = 'button';
+        button.disabled = item.value === undefined;
+        button.setAttribute('aria-pressed', String(item.value === state.year));
+        if (item.rank) {
+          button.append(make('span', 'sp-year-full', copyText(`year_label_${item.rank}`, { year: item.value })));
+          button.append(make('span', 'sp-year-short', copyText(`year_short_${item.rank}`, { year: item.value })));
+        } else {
+          button.textContent = t('filter_all');
+        }
+        button.addEventListener('click', () => {
+          state.year = item.value; state.course = ''; state.section = ''; state.page = 1;
+          renderFilters(); loadStudents();
+        });
+        yearRow.append(button);
+      });
+      filtersBox.append(yearRow);
+      const selectRow = make('div', 'sp-filter-selects');
+      const makeSelect = (label, allLabel, options, value, onChange) => {
+        const wrap = make('label', 'sp-filter-select-wrap');
+        wrap.append(make('span', 'sp-filter-label', label));
+        const select = document.createElement('select');
+        select.className = 'sp-filter-select';
+        select.setAttribute('aria-label', label);
+        const all = document.createElement('option');
+        all.value = ''; all.textContent = allLabel; select.append(all);
+        options.forEach((option) => {
+          const item = document.createElement('option');
+          item.value = option; item.textContent = option; select.append(item);
+        });
+        select.value = value;
+        select.addEventListener('change', () => onChange(select.value));
+        wrap.append(select);
+        return wrap;
+      };
+      const courses = [...new Set(state.courses.filter((item) => !state.year || item.year === state.year).map((item) => item.course).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)));
+      selectRow.append(makeSelect(t('filter_course'), t('filter_all_branches'), courses, state.course, (course) => {
+        state.course = course; state.section = ''; state.page = 1; renderFilters(); loadStudents();
       }));
-      if (state.year) {
-        const courses = state.courses.filter((item) => item.year === state.year);
-        filtersBox.append(renderChipGroup(t('filter_course'), courses.map((item) => ({ value: item.course, label: item.course })), state.course, (course) => {
-          state.course = course; state.section = ''; state.page = 1; renderFilters(); loadStudents();
-        }));
-      }
-      if (state.year && state.course) {
-        const sections = state.sections.filter((item) => item.year === state.year && item.course === state.course).map((item) => item.section);
-        if (sections.length) filtersBox.append(renderChipGroup(t('filter_section'), [...new Set(sections)].map((section) => ({ value: section, label: section })), state.section, (section) => {
+      const sections = [...new Set(state.sections
+        .filter((item) => (!state.year || item.year === state.year) && item.course === state.course)
+        .map((item) => item.section).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)));
+      if (state.course && sections.length) {
+        selectRow.append(makeSelect(t('filter_section'), t('filter_all_sections'), sections, state.section, (section) => {
           state.section = section; state.page = 1; renderFilters(); loadStudents();
         }));
+      }
+      filtersBox.append(selectRow);
+      if (state.year || state.course || state.section) {
+        const clear = make('button', 'sp-clear-filters', t('clear_filters'));
+        clear.type = 'button';
+        clear.addEventListener('click', () => {
+          state.year = ''; state.course = ''; state.section = ''; state.page = 1;
+          renderFilters(); loadStudents();
+        });
+        filtersBox.append(clear);
       }
     };
     const studentCard = (student) => {
@@ -410,7 +451,7 @@
           const card = make('a', 'sp-podium-card');
           card.href = profileLink(student.roll_number);
           card.style.setProperty('--rank-color', ['var(--gold)', 'var(--silver)', 'var(--bronze)'][index]);
-          card.append(make('span', 'sp-podium-rank', copyText('leader_rank', { rank: index + 1 })), makeAvatar(student));
+          card.append(make('span', 'sp-podium-rank', copyText('leader_rank', { rank: index + 1 })), makeAvatar(student, false, 48));
           card.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
           card.append(make('span', 'sp-student-meta', campusLine(student)));
           const podiumCount = make('span', 'sp-leader-count', String(itemValue(student)));
@@ -423,7 +464,7 @@
           const link = make('a', 'sp-leader');
           link.href = profileLink(student.roll_number);
           link.append(make('span', 'sp-leader-rank', String(index + 4)));
-          link.append(makeAvatar(student));
+          link.append(makeAvatar(student, false, 48));
           const copy = make('span', 'sp-leader-copy');
           copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
           copy.append(make('span', 'sp-student-meta', campusLine(student)));
@@ -506,6 +547,21 @@
     const leaveNote = $('leaveNote');
     const notesList = $('notesList');
     const reacting = new Set();
+    const reportedStorageKey = 'spotlight-reported-notes';
+    const readReportedIds = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(reportedStorageKey) || '[]');
+        return new Set(Array.isArray(saved)
+          ? saved.filter((id) => (typeof id === 'string' || typeof id === 'number') && /^\d{1,20}$/.test(String(id))).map(String)
+          : []);
+      } catch { return new Set(); }
+    };
+    const locallyReported = readReportedIds();
+    const saveReportedId = (id) => {
+      if (!/^\d{1,20}$/.test(String(id))) return;
+      locallyReported.add(String(id));
+      try { localStorage.setItem(reportedStorageKey, JSON.stringify([...locallyReported])); } catch { /* Reporting still succeeds if storage is unavailable. */ }
+    };
     let studentData = null;
     const profileFailure = (title, text) => {
       view.replaceChildren();
@@ -549,10 +605,18 @@
          const time = make('div', 'sp-time', spotlightUI.relativeTime(note.approved_at || note.created_at));
          const report = make('button', 'sp-action sp-report', t('report_menu_icon'));
          report.type = 'button'; report.dataset.reportMenu = 'true'; report.setAttribute('aria-label', t('report_menu_aria')); report.setAttribute('aria-expanded', 'false');
+         if (locallyReported.has(String(note.id))) {
+           report.disabled = true;
+           report.setAttribute('aria-label', t('report_already_sent'));
+         }
          const menu = make('div', 'sp-report-menu');
          menu.hidden = true;
          const reportAction = make('button', 'sp-action sp-report-action', t('report_label'));
          reportAction.type = 'button'; reportAction.dataset.report = 'true';
+         if (locallyReported.has(String(note.id))) {
+           reportAction.disabled = true;
+           reportAction.setAttribute('aria-label', t('report_already_sent'));
+         }
          menu.append(reportAction);
          tools.append(time, report, menu);
         footer.append(reactions, tools);
@@ -572,17 +636,6 @@
       document.title = `${studentData.name || t('student_fallback')} · ${t('brand_name')}`;
       view.replaceChildren();
       const card = make('section', 'sp-profile-card');
-      const photoBackdrop = make('div', 'sp-profile-backdrop');
-      const backdropPhoto = document.createElement('img');
-      backdropPhoto.alt = '';
-      backdropPhoto.width = 720;
-      backdropPhoto.height = 360;
-      backdropPhoto.loading = 'lazy';
-      backdropPhoto.decoding = 'async';
-      backdropPhoto.src = `/api/spotlight/photo/${encodeURIComponent(studentData.roll_number)}`;
-      backdropPhoto.addEventListener('error', () => backdropPhoto.remove(), { once: true });
-      photoBackdrop.append(backdropPhoto);
-      card.append(photoBackdrop);
       const main = make('div', 'sp-profile-main');
       const person = make('div', 'sp-profile-person');
       person.append(makeAvatar(studentData, true));
@@ -730,16 +783,26 @@
         const noteId = cardElement.dataset.noteId;
         const reportButton = event.target.closest('[data-report]');
          if (reportButton) {
+            if (reportButton.disabled || locallyReported.has(String(noteId))) return;
             if (!(await spotlightUI.confirm(t('report_confirm')))) return;
           reportButton.disabled = true;
           try {
             const reportResult = await getJSON(`/api/spotlight/notes/${encodeURIComponent(noteId)}/report`, { method: 'POST' });
              if (reportResult.success === false) throw new Error(reportResult.message || t('report_failed'));
-            cardElement.remove();
-            const currentNotes = Array.isArray(data.notes) ? data.notes : [];
-            data.notes = currentNotes.filter((note) => String(note.id) !== String(noteId));
-            renderNotes(data.notes);
-             showToast(t('note_reported_thanks'));
+            saveReportedId(noteId);
+            const actionButton = cardElement.querySelector('[data-report]');
+            if (actionButton) {
+              actionButton.disabled = true;
+              actionButton.setAttribute('aria-label', t('report_already_sent'));
+            }
+            const menuButtonAfterReport = cardElement.querySelector('[data-report-menu]');
+            if (menuButtonAfterReport) {
+              menuButtonAfterReport.disabled = true;
+              menuButtonAfterReport.setAttribute('aria-label', t('report_already_sent'));
+            }
+            cardElement.querySelector('.sp-report-menu').hidden = true;
+            cardElement.querySelector('[data-report-menu]')?.setAttribute('aria-expanded', 'false');
+            showToast(t('note_reported_thanks'));
            } catch (error) { showToast(error.message || t('report_failed')); reportButton.disabled = false; }
           return;
         }
@@ -928,6 +991,7 @@
         nameLine.append(name, document.createTextNode(` · ${note.roll_number || ''}`));
         meta.append(nameLine, make('div', '', `${campusLine(note)} · ${formatDate(note.created_at)}`));
          if (note.status) meta.append(make('div', '', `${copyText('status_label', { status: note.status })}${note.reported ? t('note_reported_suffix') : ''}`));
+         if (state.tab === 'reported') meta.append(make('div', 'sp-report-count', copyText('report_count_label', { count: Number(note.report_count) || 0 })));
         head.append(meta);
         article.append(head, make('div', 'sp-admin-text', note.text || ''));
         const actions = make('div', 'sp-admin-actions');
@@ -1045,7 +1109,7 @@
       spotlightTexts = response.texts || {};
       spotlightSettings = response.settings || {};
       applyStaticCopy();
-      spotlightUI.setupTheme();
+      spotlightUI.setupLight();
       if (errorView) errorView.hidden = true;
       if (app && failedPageVisibility.size) {
         failedPageVisibility.forEach((wasHidden, node) => { node.hidden = wasHidden; });

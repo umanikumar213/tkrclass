@@ -19,7 +19,7 @@ API routes are mounted under `/api/chat/*` and `/api/reyi/*`. Ordinary posts/com
 
 Spotlight is independent and available all day at `/api/spotlight/*`; it does not use the Reyi night window. Its attendance-homepage link remains hidden until the user asks to enable it.
 
-Spotlight's students use it only on phones. Prioritize 360–430px layouts and touch interaction; desktop support is secondary. Keep visual redesigns separate from the backend APIs, stored records, authentication and abuse-prevention rules.
+Spotlight's students use it only on phones. Prioritize 360–430px layouts and touch interaction; desktop support is secondary. Spotlight is intentionally light-only, retaining its pink–purple–blue accent; do not reintroduce a theme toggle or saved theme preference. Keep visual redesigns separate from the backend APIs, stored records, authentication and abuse-prevention rules.
 
 ## Files and services
 
@@ -98,6 +98,8 @@ These checks are abuse deterrents, not proof of identity: fingerprints can colli
 
 Other Spotlight limits: notes one per two minutes and at most ten pending per hashed IP; reactions 30/minute; reports 10/hour; photo and OG requests share 300/minute. Counter changes and moderation are transactional. Limits/caches/hidden sets are per process; use one application instance or add shared invalidation/limits before scaling to multiple replicas.
 
+Reporting an approved Spotlight note does not hide it or reduce its note count. Reports are private moderation signals: `report_count` tracks unique signed visitors, with one persisted voter-hash entry per note. Repeated reports from that visitor are ignored, including after an admin keeps the note. The Reported queue contains approved flagged notes, newest report first; Keep clears the flag without changing the note/count, while Delete permanently removes the note and decrements the count. Report flags/counts are never included in the public note API.
+
 ## Environment
 
 Set these deployment variables; keep credentials in the hosting platform's secret settings, never in source control:
@@ -127,7 +129,7 @@ npm start
 
 The Replit workflow runs `PORT=5000 node server.js`; Railway uses `railway.toml` with the same Node entry point. Existing PostgreSQL records survive application redeploys.
 
-Static CSS and JavaScript use `Cache-Control: no-cache` with ETags so browsers/CDNs revalidate and receive a fast 304 when unchanged. Static HTML uses `Cache-Control: no-store`; Spotlight page routes also send `CDN-Cache-Control: no-store`. Spotlight's three HTML templates reference `/spotlight.css?v=20261119` and the corresponding `/spotlight*.js?v=20261119` scripts. **Bump this version number consistently in all three templates whenever Spotlight CSS or JavaScript changes**, so previously cached URLs cannot retain an older design.
+Static CSS and JavaScript use `Cache-Control: no-cache` with ETags so browsers/CDNs revalidate and receive a fast 304 when unchanged. Static HTML uses `Cache-Control: no-store`; Spotlight page routes also send `CDN-Cache-Control: no-store`. Spotlight's three HTML templates reference `/spotlight.css?v=20261119b` and the corresponding `/spotlight*.js?v=20261119b` scripts. **Bump this version number consistently in all three templates whenever Spotlight CSS or JavaScript changes**, so previously cached URLs cannot retain an older design.
 
 ```sh
 npm test

@@ -6,6 +6,10 @@ const path = require('node:path');
 async function runLayoutChecks({ browser, base, first, db, loader }) {
   const output = path.resolve(__dirname, '../generated-artifacts/spotlight-layouts');
   await fs.mkdir(output, { recursive: true });
+  // Four real year values and a multi-section branch exercise the full filter row.
+  for (const [suffix, year, section] of [['04', '4th Year', 'A'], ['05', '3rd Year', 'A'], ['06', '2nd Year', 'A'], ['07', '4th Year', 'B']]) {
+    await db.query('UPDATE spotlight_students SET year=$2,section=$3 WHERE roll_number=$1', [`26K91A01${suffix}`, year, section]);
+  }
   // Enough positive scores to exercise both the podium and the remaining ranked list.
   for (let i = 4; i <= 8; i++) {
     const roll = `26K91A01${String(i).padStart(2, '0')}`;
@@ -30,11 +34,15 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         surface: getComputedStyle(root).getPropertyValue('--surface').trim(),
         background: getComputedStyle(root).getPropertyValue('--bg').trim(),
         externalScripts: [...document.scripts].map(s => s.src).filter(src => src && new URL(src).origin !== location.origin),
+        widestPhoto: Math.max(0, ...[...document.querySelectorAll('img[src*=\"/api/spotlight/photo/\"]')].map(img => img.getBoundingClientRect().width)),
       };
     });
     assert.ok(metrics.scrollWidth <= metrics.width, `${label}: horizontal page overflow (${metrics.scrollWidth}/${metrics.width})`);
     assert.match(metrics.family, /Plus Jakarta Sans/, `${label}: expected requested font`);
     assert.deepEqual(metrics.externalScripts, [], `${label}: no third-party JavaScript`);
+    assert.ok(metrics.widestPhoto <= 140, `${label}: student photo is wider than 140px (${metrics.widestPhoto})`);
+    assert.equal(await page.locator('[data-theme-toggle]').count(), 0, 'Theme toggles must be removed');
+    assert.equal(await page.locator('html').evaluate(node => getComputedStyle(node).colorScheme), 'light');
     const luminance = value => {
       let hex = value.replace('#', '');
       if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -62,12 +70,17 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         await page.goto(`${base}/spotlight`);
         await page.locator('#studentGrid .sp-student').first().waitFor();
         await page.locator('#leaderboard a').first().waitFor();
-        assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
         await checkPage(page, `Discover ${width} ${theme}`);
-        assert.equal(await page.locator('#studentGrid').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), width < 600 ? 2 : 4);
+        assert.equal(await page.locator('#studentGrid').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), width < 768 ? 1 : width < 1100 ? 2 : 3);
         // The leaderboard precedes the directory in the actual document, not just visually.
         assert.equal(await page.evaluate(() => Boolean(document.querySelector('#leaderboard').compareDocumentPosition(document.querySelector('#studentGrid')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
         await screenshot(page, `discover-${width}-${theme}`);
+        await page.locator('#studentGrid .sp-student').first().scrollIntoViewIfNeeded();
+        const card = page.locator('#studentGrid .sp-student').first();
+        assert.ok((await card.boundingBox()).height >= 88);
+        assert.equal((await card.locator('.sp-avatar').boundingBox()).width, 72);
+        assert.equal(await card.locator('img').getAttribute('width'), '72');
+        await screenshot(page, `directory-${width}-${theme}`);
         await page.locator('#studentSearch').fill('Missing student');
         await page.waitForTimeout(350);
         await page.locator('#studentGrid .sp-state').waitFor();
@@ -93,19 +106,12 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
           }
           await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 35);
         }
-        // Explicit theme choice survives reload and does not contain any credential.
-        await page.locator('[data-theme-toggle]').first().click();
-        const opposite = theme === 'dark' ? 'light' : 'dark';
-        assert.equal(await page.locator('html').getAttribute('data-theme'), opposite);
-        await page.reload();
-        await page.locator('#studentGrid .sp-student').first().waitFor();
-        assert.equal(await page.locator('html').getAttribute('data-theme'), opposite);
-        await page.locator('[data-theme-toggle]').first().click();
+        await checkFilters(page);
 
         await page.goto(`${base}/spotlight/${first}`);
         await page.locator('[data-like-button]').waitFor();
         await checkPage(page, `Profile ${width} ${theme}`);
-        assert.equal(await page.locator('.sp-profile-name').evaluate(node => getComputedStyle(node).color), 'rgb(245, 245, 250)', 'Profile name must remain readable on the dark photo in both themes');
+        assert.equal(await page.locator('.sp-profile-backdrop img').count(), 0, 'Profile photo must not be used as a stretched backdrop');
         await screenshot(page, `profile-${width}-${theme}`);
         await page.locator('#openNoteComposer').click();
         await page.locator('#noteText').waitFor();
@@ -142,13 +148,49 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         await checkPage(page, `Settings ${width} ${theme}`);
         await screenshot(page, `settings-${width}-${theme}`);
         assert.equal(await page.evaluate(() => sessionStorage.length), 0);
-        assert.ok(await page.evaluate(() => Object.keys(localStorage).every(key => /theme/i.test(key))));
+        assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => /theme/i.test(key))), false);
       } finally { await context.close(); }
     }
   }
   assert.deepEqual(errors, [], 'Browser layout checks should have no JavaScript errors');
   await runChallengeChecks({ browser, base, first, loader });
-  console.log('PASS: Discover, profile, note sheet and admin at 360/390/430/1440px in both themes, saved theme, search clearing, automatic pagination, custom confirmations and unsaved settings.');
+  console.log('PASS: light-only Discover, profile, note sheet and admin at 360/390/430/1440px under both OS preferences; compact photos, complete year controls, dropdowns, pagination and settings.');
+}
+
+async function checkFilters(page) {
+  await page.evaluate(() => scrollTo(0, 0));
+  const row = page.locator('.sp-year-row');
+  assert.equal(await row.locator('button').count(), 5, 'All four data years must be available');
+  assert.equal(await row.evaluate(node => node.scrollWidth <= node.clientWidth), true, 'Year control must never scroll horizontally');
+  const fourth = row.locator('button').filter({ hasText: /4th/ });
+  assert.equal(await fourth.isVisible(), true);
+  const fourthBox = await fourth.boundingBox();
+  assert.ok(fourthBox.x >= 0 && fourthBox.x + fourthBox.width <= page.viewportSize().width, 'Fourth year must fit on screen');
+  const change = async action => {
+    const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/spotlight/students' && response.status() === 200);
+    await action();
+    await response;
+    await page.locator('#studentGrid .sp-student').first().waitFor();
+  };
+  await change(() => fourth.click());
+  await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 2);
+  const branch = page.locator('.sp-filter-select').first();
+  assert.equal((await branch.boundingBox()).height, 44);
+  assert.deepEqual(await branch.locator('option').evaluateAll(nodes => nodes.map(node => node.value)), ['', 'CSE']);
+  await change(() => branch.selectOption('CSE'));
+  const section = page.locator('.sp-filter-select').nth(1);
+  assert.deepEqual(await section.locator('option').evaluateAll(nodes => nodes.map(node => node.value)), ['', 'A', 'B']);
+  await change(() => section.selectOption('B'));
+  await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 1);
+  assert.equal(await page.locator('.sp-clear-filters').isVisible(), true);
+  await change(() => row.locator('button').filter({ hasText: /1st/ }).click());
+  assert.equal(await branch.inputValue(), '', 'Year changes reset branch');
+  await change(() => branch.selectOption('CIVIL'));
+  assert.equal(await page.locator('.sp-filter-select').count(), 1, 'NULL-only branch must hide the Section dropdown');
+  await change(() => page.locator('.sp-clear-filters').click());
+  assert.equal(await page.locator('.sp-clear-filters').count(), 0);
+  assert.equal(await branch.inputValue(), '');
+  assert.equal(await row.locator('button[aria-pressed=\"true\"]').textContent(), 'All');
 }
 
 async function runChallengeChecks({ browser, base, first, loader }) {
@@ -185,6 +227,19 @@ async function runChallengeChecks({ browser, base, first, loader }) {
     await page.locator('[data-like-button]').click();
     await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'false');
     assert.equal(await page.evaluate(() => window.challengeExecutions), 1);
+    // A blocked storage API must not break reporting or the rest of the profile.
+    await page.addInitScript(() => {
+      Storage.prototype.getItem = () => { throw new Error('Storage disabled for this test'); };
+      Storage.prototype.setItem = () => { throw new Error('Storage disabled for this test'); };
+    });
+    await page.reload();
+    const reportCard = page.locator('[data-note-id]').first();
+    await reportCard.locator('[data-report-menu]').click();
+    await reportCard.locator('[data-report]').click();
+    await page.locator('[data-confirm-accept]').click();
+    await page.locator('#toast.show', { hasText: 'Thanks, an admin will review this note.' }).waitFor();
+    assert.equal(await reportCard.isVisible(), true);
+    assert.equal(await reportCard.locator('[data-report]').isDisabled(), true);
     console.log('PASS: managed security check stays visible outside the note sheet and remembered verification works across likes and notes.');
   } finally {
     delete loader.env.TURNSTILE_SITE_KEY;

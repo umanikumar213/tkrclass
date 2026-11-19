@@ -138,7 +138,7 @@ router.get('/api/spotlight/leaderboard', wrap(async (req, res) => {
         WHERE created_at >= NOW()-INTERVAL '24 hours' GROUP BY roll_number
       ), recent_notes AS (
         SELECT roll_number,COUNT(*)::INT AS total FROM spotlight_notes
-        WHERE status='approved' AND reported=FALSE AND approved_at >= NOW()-INTERVAL '24 hours' GROUP BY roll_number
+        WHERE status='approved' AND approved_at >= NOW()-INTERVAL '24 hours' GROUP BY roll_number
       ) SELECT s.roll_number,s.name,s.course,s.section,s.year,s.like_count,s.note_count,
         (COALESCE(l.total,0)+2*COALESCE(n.total,0))::INT AS score
         FROM spotlight_students s LEFT JOIN recent_likes l USING(roll_number) LEFT JOIN recent_notes n USING(roll_number)
@@ -182,7 +182,7 @@ router.get('/api/spotlight/students/:roll', validateRoll, identity, wrap(async (
       [req.roll, req.voterHash, req.spotlightIp, settings.like_max_per_ip_per_profile, settings.like_device_check, device]),
     pool.query(
       `SELECT r.note_id,r.emoji FROM spotlight_note_reactions r JOIN spotlight_notes n ON n.id=r.note_id
-       WHERE n.roll_number=$1 AND n.status='approved' AND n.reported=FALSE AND r.voter_hash=$2`, [req.roll, req.voterHash]),
+       WHERE n.roll_number=$1 AND n.status='approved' AND r.voter_hash=$2`, [req.roll, req.voterHash]),
   ]);
   const mine = new Map(reactions.rows.map(row => [row.note_id, row.emoji]));
   if (hiddenRolls.has(req.roll)) return res.status(404).json({ message: message(req, 'student_missing') });
@@ -268,10 +268,14 @@ router.post('/api/spotlight/notes/:id/react', validateId, identity, spotlightLim
 router.post('/api/spotlight/notes/:id/report', validateId, identity, spotlightLimit(10, 3600000), wrap(async (req, res) => {
   await transaction(async client => {
     const note = await lockNote(client, req.noteId, true);
-    await client.query('UPDATE spotlight_notes SET reported=TRUE WHERE id=$1', [note.id]);
+    const inserted = await client.query(
+      `INSERT INTO spotlight_note_reports(note_id,voter_hash) VALUES($1,$2)
+       ON CONFLICT(note_id,voter_hash) DO NOTHING RETURNING note_id`, [note.id, req.voterHash]);
+    if (inserted.rowCount) {
+      await client.query('UPDATE spotlight_notes SET reported=TRUE,report_count=report_count+1 WHERE id=$1', [note.id]);
+    }
   });
-  // A reported note must vanish immediately, including from warmed shared profiles.
-  clearSpotlightCaches();
+  // Reporting is a private moderation signal, not a public visibility change.
   res.json({ success: true });
 }));
 

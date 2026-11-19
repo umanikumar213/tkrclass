@@ -97,7 +97,7 @@ async function main() {
       assert.equal(html.response.headers.get('cdn-cache-control'), 'no-store');
       assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor)?\.(?:js|css)"/);
       assert.doesNotMatch(html.body, /\/spotlight-assets\//);
-      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor)?\.(?:css|js)\?v=[0-9]+)"/g)];
+      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor)?\.(?:css|js)\?v=[a-z0-9]+)"/g)];
       assert.ok(links.length >= 3, 'Every Spotlight page must use version queries for CSS and scripts');
       for (const [, asset] of links) releaseAssets.add(asset);
     }
@@ -274,17 +274,48 @@ async function main() {
     assert.equal(result.body.counts.fire, 0);
     assert.equal((await post(`/api/spotlight/notes/${id}/react`, { body: { emoji: '__proto__' } })).status, 400);
     assert.equal((await post(`/api/spotlight/notes/${id}/report`, { cookie: visitor })).status, 200);
-    assert.equal((await request(`/api/spotlight/students/${first}`, { cookie: visitor })).body.notes.length, 0);
-    assert.equal((await request('/api/spotlight/admin/queue', { admin: true })).body.reported[0].id, id);
+    profile = (await request(`/api/spotlight/students/${first}`, { cookie: visitor })).body;
+    assert.equal(profile.notes.length, 1, 'Reporting must not hide an approved note');
+    assert.equal(profile.student.note_count, 1);
+    assert.equal('reported' in profile.notes[0], false);
+    assert.equal('report_count' in profile.notes[0], false);
+    assert.equal((await post(`/api/spotlight/notes/${id}/report`, { cookie: visitor })).status, 200);
+    let reported = (await request('/api/spotlight/admin/queue', { admin: true })).body.reported;
+    assert.equal(reported[0].id, id);
+    assert.equal(reported[0].report_count, 1, 'Repeated reports by one voter must be ignored');
+    const anotherId = (await db.query(
+      `INSERT INTO spotlight_notes(roll_number,text,ip_hash,status,approved_at,created_at)
+       VALUES($1,'Another reported note','fixture','approved',NOW(),NOW()+INTERVAL '1 day') RETURNING id`, [first])).rows[0].id;
+    await db.query('UPDATE spotlight_students SET note_count=note_count+1 WHERE roll_number=$1', [first]);
+    assert.equal((await post(`/api/spotlight/notes/${anotherId}/report`, { cookie: visitor })).status, 200);
+    const secondReporter = (await request('/api/spotlight/config', { network: ip(7) })).cookie;
+    const simultaneous = await Promise.all(Array.from({ length: 3 }, () =>
+      post(`/api/spotlight/notes/${id}/report`, { cookie: secondReporter, network: ip(7) })));
+    assert.ok(simultaneous.every(response => response.status === 200));
+    reported = (await request('/api/spotlight/admin/queue', { admin: true })).body.reported;
+    assert.deepEqual(reported.map(note => note.id), [id, anotherId], 'Reported queue sorts by newest report, not note creation');
+    assert.equal(reported[0].report_count, 2, 'Concurrent reports from one voter count once');
+    assert.ok(reported[0].last_reported_at);
+    assert.equal((await post(`/api/spotlight/notes/${id}/react`, { cookie: visitor, body: { emoji: 'heart' } })).status, 200);
+    assert.equal((await request(`/api/spotlight/students/${first}`, { cookie: visitor })).body.notes.find(note => note.id === id).myReaction, 'heart');
+    await post(`/api/spotlight/admin/notes/${anotherId}/delete`, { admin: true });
     await post(`/api/spotlight/admin/notes/${id}/keep`, { admin: true });
     profile = (await request(`/api/spotlight/students/${first}`, { cookie: visitor })).body;
     assert.equal(profile.notes.length, 1);
     assert.equal(profile.student.note_count, 1);
+    assert.equal((await request('/api/spotlight/admin/queue', { admin: true })).body.reported.length, 0);
+    await post(`/api/spotlight/notes/${id}/report`, { cookie: visitor });
+    assert.equal((await request('/api/spotlight/admin/queue', { admin: true })).body.reported.length, 0, 'An old reporter cannot reflag a note after Keep');
+    assert.deepEqual((await db.query('SELECT reported,report_count FROM spotlight_notes WHERE id=$1', [id])).rows[0], { reported: false, report_count: 2 });
+    const thirdReporter = (await request('/api/spotlight/config', { network: ip(8) })).cookie;
+    await post(`/api/spotlight/notes/${id}/report`, { cookie: thirdReporter, network: ip(8) });
+    assert.equal((await request('/api/spotlight/admin/queue', { admin: true })).body.reported[0].report_count, 3);
     await post(`/api/spotlight/admin/notes/${id}/delete`, { admin: true });
     profile = (await request(`/api/spotlight/students/${first}`, { cookie: visitor })).body;
     assert.equal(profile.notes.length, 0);
     assert.equal(profile.student.note_count, 0);
     assert.equal((await db.query('SELECT 1 FROM spotlight_note_reactions WHERE note_id=$1', [id])).rowCount, 0);
+    assert.equal((await db.query('SELECT 1 FROM spotlight_note_reports WHERE note_id=$1', [id])).rowCount, 0);
     const pendingIp = crypto.createHmac('sha256', loader.env.SESSION_SECRET).update(ip(6)).digest('hex');
     for (let i = 0; i < 10; i++) {
       await db.query('INSERT INTO spotlight_notes(roll_number,text,ip_hash) VALUES($1,$2,$3)', [first, `Pending ${i}`, pendingIp]);

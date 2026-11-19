@@ -29,8 +29,8 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await page.locator('#loadMore').click();
     await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 35);
     assert.equal(await page.locator('#loadMore').isVisible(), false);
-    await page.locator('#filterSteps .sp-chip', { hasText: '1st Year' }).click();
-    await page.locator('#filterSteps .sp-chip', { hasText: 'CIVIL' }).click();
+    await page.locator('#filterSteps .sp-year-button').filter({ hasText: /1st/ }).click();
+    await page.locator('#filterSteps select').first().selectOption('CIVIL');
     await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 1);
     assert.equal(await page.locator('.sp-filter-label', { hasText: 'Section' }).count(), 0);
     await page.locator('#studentSearch').fill(first.toLowerCase());
@@ -96,9 +96,16 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await page.locator(`[data-note-id="${note.id}"] [data-report-menu]`).click();
     await page.locator(`[data-note-id="${note.id}"] [data-report]`).click();
     await page.locator('[data-confirm-accept]').click();
-    await page.locator(`[data-note-id="${note.id}"]`).waitFor({ state: 'detached' });
+    await page.locator('#toast.show', { hasText: 'Thanks, an admin will review this note.' }).waitFor();
+    assert.equal(await page.locator(`[data-note-id="${note.id}"]`).count(), 1);
+    assert.equal(await page.locator(`[data-note-id="${note.id}"] [data-report]`).isDisabled(), true);
+    await page.reload();
+    await page.locator(`[data-note-id="${note.id}"]`).waitFor();
+    assert.equal(await page.locator(`[data-note-id="${note.id}"] [data-report-menu]`).isDisabled(), true);
+    assert.equal(await page.locator(`[data-note-id="${note.id}"] [data-report]`).isDisabled(), true, 'Reported action stays disabled after refresh');
     await adminPage.locator('[data-admin-tab=reported]').click();
     const report = adminPage.locator('.sp-admin-note', { hasText: 'A kind browser test note' });
+    assert.match(await report.textContent(), /1/);
     await report.locator('button', { hasText: 'Keep note' }).click();
     await report.waitFor({ state: 'detached' });
     await adminPage.locator('[data-admin-tab=students]').click();
@@ -166,7 +173,8 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await adminPage.locator('#adminLogout').click();
     await adminPage.locator('#adminLoginView:not([hidden])').waitFor();
     assert.equal(await adminPage.locator('#adminPassword').inputValue(), '');
-    assert.equal(await adminPage.evaluate(() => sessionStorage.length + localStorage.length), 0);
+    assert.equal(await adminPage.evaluate(() => sessionStorage.length), 0);
+    assert.ok(await adminPage.evaluate(() => Object.keys(localStorage).every(key => key === 'spotlight-reported-notes')));
     assert.equal(await adminPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
     await context.close();
