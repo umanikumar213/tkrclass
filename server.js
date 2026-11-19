@@ -41,7 +41,13 @@ app.use(express.json());
 app.use(require('./chat'));
 app.use(require('./reyi'));
 app.use(require('./spotlight'));
-app.use(express.static('public'));
+app.use(express.static('public', {
+  etag: true,
+  setHeaders(res, filePath) {
+    if (/\.(css|js)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+    else if (/\.html$/.test(filePath)) res.setHeader('Cache-Control', 'no-store');
+  }
+}));
 
 const BASE  = 'http://103.171.190.44/TKRCET';
 const LOGIN = `${BASE}/`;

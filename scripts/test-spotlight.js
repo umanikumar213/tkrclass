@@ -43,7 +43,13 @@ async function main() {
     const app = express();
     app.set('trust proxy', 1);
     app.use(express.json(), router);
-    app.use(express.static(path.resolve(__dirname, '../public')));
+    app.use(express.static(path.resolve(__dirname, '../public'), {
+      etag: true,
+      setHeaders(res, filePath) {
+        if (/\.(css|js)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+        else if (/\.html$/.test(filePath)) res.setHeader('Cache-Control', 'no-store');
+      },
+    }));
     app.use((error, req, res, next) => {
       console.error(error);
       res.status(500).json({ message: 'Test server error' });
@@ -90,28 +96,26 @@ async function main() {
       assert.equal(html.response.headers.get('cache-control'), 'no-store');
       assert.equal(html.response.headers.get('cdn-cache-control'), 'no-store');
       assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor)?\.(?:js|css)"/);
-      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight-assets\/([a-f0-9]{20})\/([^"]+))"/g)];
-      assert.ok(links.length >= 3, 'Every Spotlight page must use fingerprinted CSS and scripts');
+      assert.doesNotMatch(html.body, /\/spotlight-assets\//);
+      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor)?\.(?:css|js)\?v=[0-9]+)"/g)];
+      assert.ok(links.length >= 3, 'Every Spotlight page must use version queries for CSS and scripts');
       for (const [, asset] of links) releaseAssets.add(asset);
     }
     assert.equal(releaseAssets.size, 4, 'All four Spotlight assets share this release');
-    assert.equal(new Set([...releaseAssets].map(url => url.split('/')[2])).size, 1);
+    assert.equal(new Set([...releaseAssets].map(url => new URL(url, base).searchParams.get('v'))).size, 1);
     for (const url of releaseAssets) {
       const asset = await request(url);
       assert.equal(asset.status, 200);
-      assert.match(asset.response.headers.get('cache-control'), /immutable/);
-      assert.equal(asset.body, fs.readFileSync(path.join(__dirname, '../public', url.split('/').pop()), 'utf8'));
-      assert.match(asset.response.headers.get('content-type'), url.endsWith('.css') ? /text\/css/ : /javascript/);
+      const filename = new URL(url, base).pathname.slice(1);
+      assert.equal(asset.response.headers.get('cache-control'), 'no-cache');
+      assert.equal(asset.body, fs.readFileSync(path.join(__dirname, '../public', filename), 'utf8'));
+      assert.match(asset.response.headers.get('content-type'), filename.endsWith('.css') ? /text\/css/ : /javascript/);
       assert.equal((await request(url, { headers: {
         'If-None-Match': asset.response.headers.get('etag'), 'Cache-Control': 'max-age=0',
       } })).status, 304);
     }
-    const currentAsset = [...releaseAssets][0];
-    assert.equal((await request(currentAsset.replace(/\/[a-f0-9]{20}\//, '/00000000000000000000/'))).status, 404);
-    const unknownAsset = await request(currentAsset.replace(/[^/]+$/, 'server.js'));
-    assert.equal(unknownAsset.status, 404);
-    assert.equal(unknownAsset.response.headers.get('cache-control'), 'no-store');
-    console.log('PASS: all Spotlight pages use matching fingerprinted assets, fresh HTML, correct content types and safe immutable caching.');
+    assert.equal((await request('/spotlight.html')).response.headers.get('cache-control'), 'no-store');
+    console.log('PASS: all Spotlight pages use matching version queries, no-store HTML, revalidated CSS/JS and fast 304 responses.');
     const all = await request('/api/spotlight/students');
     assert.equal(all.status, 200);
     assert.equal(all.body.students.length, 30);
