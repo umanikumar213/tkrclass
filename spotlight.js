@@ -11,10 +11,11 @@ const {
 const { getContent, contentMiddleware, message } = require('./lib/spotlight-settings');
 const { format, definitions } = require('./lib/spotlight-texts');
 const {
-  fields, lists, boards, filters, clearProfile, clearSpotlightCaches,
+  fields, lists, boards, filters, notesFeed, clearProfile, clearSpotlightCaches,
   fail, transaction, lockStudent, lockNote, publicProfile,
 } = require('./lib/spotlight-store');
 const { spotlightAdmin } = require('./lib/spotlight-admin');
+const { getNotesFeed } = require('./lib/spotlight-notes-feed');
 
 const router = express.Router();
 router.use('/spotlight', (req, res, next) => {
@@ -51,6 +52,21 @@ function publicOrigin(req) {
 router.get('/spotlight', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight.html')));
 router.get('/spotlight/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight-admin.html')));
 router.get('/leaderboard', (req, res) => res.redirect(301, '/spotlight/leaderboard'));
+router.get('/spotlight/notes', (req, res) => {
+  const texts = req.spotlightContent.texts;
+  const origin = publicOrigin(req);
+  const tags = {
+    'og:title': texts.notes_feed_page_title,
+    'og:description': texts.notes_feed_subtitle,
+    'og:type': 'website',
+    'og:url': `${origin}/spotlight/notes`,
+    'og:image': `${origin}/api/spotlight/og/SPOTLIGHT.jpg`,
+  };
+  const meta = Object.entries(tags).map(([key, value]) => `<meta property="${key}" content="${escapeHtml(value)}">`).join('\n');
+  const template = fs.readFileSync(path.join(__dirname, 'public/spotlight-notes.html'), 'utf8');
+  res.type('html').send(template.replace('<!--SPOTLIGHT_META-->', meta)
+    .replace(/(<title\b[^>]*>)[\s\S]*?(<\/title>)/i, (_, open, close) => `${open}${escapeHtml(texts.notes_feed_page_title)}${close}`));
+});
 router.get('/spotlight/leaderboard', (req, res) => {
   const texts = req.spotlightContent.texts;
   const origin = publicOrigin(req);
@@ -99,6 +115,9 @@ router.get('/api/spotlight/config', identity, (req, res) => {
   });
 });
 router.use('/api/spotlight/admin', spotlightAdmin({ wrap, validateRoll, validateId }));
+router.get('/api/spotlight/notes/feed', spotlightLimit(120, 60000), identity, wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store').json(await getNotesFeed(req));
+}));
 
 router.get('/api/spotlight/filters', wrap(async (req, res) => {
   let payload = filters.get('all');
@@ -287,6 +306,7 @@ router.post('/api/spotlight/notes/:id/react', validateId, identity, spotlightLim
     return { roll: note.roll_number, myReaction: next, counts: { heart: row.react_heart, laugh: row.react_laugh, fire: row.react_fire } };
   });
   clearProfile(result.roll);
+  notesFeed.clear();
   res.json({ counts: result.counts, myReaction: result.myReaction });
 }));
 router.post('/api/spotlight/notes/:id/report', validateId, identity, spotlightLimit(10, 3600000), wrap(async (req, res) => {

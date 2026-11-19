@@ -2615,3 +2615,191 @@ textarea.sp-settings-input {
     padding-bottom: calc(210px + var(--safe-bottom));
   }
 }
+
+/* Campus-wide notes feed */
+.sp-notes-page {
+  max-width: 780px;
+  margin: 8px auto 0;
+}
+
+.sp-notes-page-heading {
+  position: relative;
+  align-items: flex-start;
+  margin: 18px 0 21px;
+}
+
+.sp-notes-page-heading .sp-title {
+  margin-top: 0;
+}
+
+.sp-new-notes {
+  position: sticky;
+  top: calc(72px + var(--safe-top));
+  z-index: 14;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border: 1px solid color-mix(in srgb, var(--like) 35%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--like) 8%);
+  color: var(--like-ink);
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 5px 18px #35304d16;
+  cursor: pointer;
+  animation: sp-arrive .2s both;
+}
+
+.sp-feed-list {
+  display: grid;
+  gap: 11px;
+}
+
+.sp-feed-note {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 20px 20px 20px 7px;
+  background: var(--surface);
+  box-shadow: 0 7px 22px #35304d0a;
+  animation: sp-arrive .25s both;
+}
+
+.sp-feed-student {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sp-feed-student .sp-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 11px;
+}
+
+.sp-feed-student-copy {
+  min-width: 0;
+}
+
+.sp-feed-student-name {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-feed-student-meta {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-feed-note .sp-note-text {
+  margin-top: 12px;
+  white-space: pre-wrap;
+}
+
+.sp-feed-note .sp-note-footer {
+  align-items: flex-end;
+}
+
+.sp-feed-note .sp-reactions {
+  gap: 4px;
+}
+
+.sp-feed-note [data-reaction] {
+  min-height: 40px;
+}
+
+.sp-feed-tools {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.sp-feed-tools .sp-report-menu {
+  right: 0;
+  bottom: 44px;
+}
+
+.sp-feed-skeleton {
+  min-height: 148px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 20px 20px 20px 7px;
+  background: linear-gradient(90deg, var(--surface2) 25%, color-mix(in srgb, var(--surface2) 55%, var(--bg)) 43%, var(--surface2) 62%);
+  background-size: 400% 100%;
+  animation: sp-shimmer 1.35s ease infinite;
+}
+
+.sp-feed-sentinel {
+  height: 2px;
+}
+
+.sp-feed-end {
+  margin: 4px 0 0;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sp-feed-controls {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.sp-feed-controls .sp-more {
+  margin-top: 0;
+}
+
+.nav-icon.sp-nav-emoji {
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.nav-icon.sp-nav-emoji::after {
+  display: none;
+}
+
+@media (max-width: 679px) {
+  .sp-notes-page {
+    margin-top: 2px;
+  }
+
+  .sp-notes-page-heading {
+    margin: 14px 0 17px;
+  }
+
+  .sp-feed-note {
+    padding: 13px;
+  }
+
+  .sp-feed-note .sp-note-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sp-feed-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!--SPOTLIGHT_META-->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f3fa">
+  <title data-sp-text="notes_feed_page_title">Latest notes · TKR Spotlight</title>
+  <link rel="stylesheet" href="/spotlight.css?v=20261120a">
+  <script defer src="/spotlight-ui.js?v=20261120a"></script>
+  <script defer src="/spotlight.js?v=20261120a"></script>
+</head>
+<body data-spotlight-page="notes">
+  <main class="sp-shell sp-narrow" id="app">
+    <section id="spotlightTextsError" class="sp-state" hidden><strong data-sp-text="texts_load_error">Spotlight content could not load. Check your connection and retry.</strong><button id="spotlightTextsRetry" type="button" class="sp-btn sp-btn-secondary" data-sp-text="texts_retry">Retry loading Spotlight</button></section>
+    <header class="sp-topbar">
+      <a class="sp-brand" href="/spotlight" aria-label="TKR Spotlight home" data-sp-aria="home_aria">
+        <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
+        <span><span class="sp-brand-name" data-sp-text="brand_name">TKR Spotlight</span><span class="sp-brand-sub" data-sp-text="tagline">A little appreciation goes far</span></span>
+      </a>
+      <nav class="sp-desktop-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+        <a class="sp-quiet-link" href="/spotlight" data-sp-text="discover_link">Discover</a>
+        <a class="sp-quiet-link" href="/spotlight/leaderboard"><span data-sp-text="leaderboard_nav_emoji">🏆</span> <span data-sp-text="leaderboard_short">Leaderboard</span></a>
+        <a class="sp-quiet-link is-current" href="/spotlight/notes" aria-current="page"><span data-sp-text="notes_nav_emoji">💌</span> <span data-sp-text="notes_nav_label">Notes</span></a>
+        <a class="sp-quiet-link" href="/" data-sp-text="attendance_link">Attendance</a>
+      </nav>
+    </header>
+    <section class="sp-notes-page">
+      <div class="sp-section-head sp-notes-page-heading">
+        <div>
+          <h1 class="sp-title" data-sp-text="notes_feed_title">Latest notes</h1>
+          <p class="sp-intro" data-sp-text="notes_feed_subtitle">Kind words from across campus, freshest first.</p>
+        </div>
+        <button type="button" class="sp-new-notes" id="notesFeedNew" data-sp-text="notes_feed_new" hidden>New notes</button>
+      </div>
+      <div id="notesFeed" class="sp-feed-list" aria-live="polite"></div>
+      <div id="notesFeedSentinel" class="sp-feed-sentinel" aria-hidden="true"></div>
+      <div id="notesFeedControls" class="sp-feed-controls" hidden>
+        <button type="button" id="notesFeedMore" class="sp-more" data-sp-text="notes_feed_more">Load more</button>
+      </div>
+    </section>
+    <footer class="sp-footer" data-sp-text="footer_about">A student appreciation space for TKR College of Engineering &amp; Technology.</footer>
+    <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+    <nav class="sp-bottom-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+      <a href="/spotlight"><span class="nav-icon" aria-hidden="true"></span><span data-sp-text="discover_link">Discover</span></a>
+      <a href="/spotlight/leaderboard"><span class="nav-icon sp-nav-emoji" data-sp-text="leaderboard_nav_emoji" aria-hidden="true">🏆</span><span data-sp-text="leaderboard_short">Leaderboard</span></a>
+      <a class="is-current" href="/spotlight/notes" aria-current="page"><span class="nav-icon sp-nav-emoji" data-sp-text="notes_nav_emoji" aria-hidden="true">💌</span><span data-sp-text="notes_nav_label">Notes</span></a>
+      <a href="/"><span class="nav-icon nav-home" aria-hidden="true"></span><span data-sp-text="attendance_link">Attendance</span></a>
+    </nav>
+    <dialog id="spotlightConfirmDialog" class="sp-confirm-dialog" aria-labelledby="confirmDialogTitle">
+      <div class="sp-confirm-content"><h2 id="confirmDialogTitle" data-sp-text="confirm_title">One quick check</h2><p id="confirmDialogMessage"></p><div class="sp-confirm-actions"><button type="button" class="sp-btn sp-btn-secondary" data-confirm-cancel data-sp-text="confirm_cancel">Cancel</button><button type="button" class="sp-btn sp-btn-danger" data-confirm-accept data-sp-text="confirm_accept">Continue</button></div></div>
+    </dialog>
+  </main>
+</body>
+</html>
