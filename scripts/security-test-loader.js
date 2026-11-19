@@ -40,7 +40,7 @@ function createTestLoader({ pool, axios, directory, timers, logs = [] }) {
         timers.push(timer);
         return timer;
       },
-    }, { filename });
+    }, { filename, importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER });
     return module.exports;
   }
   return { load: name => load(path.resolve(root, name)), env, logs };

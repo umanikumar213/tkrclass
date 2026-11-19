@@ -343,7 +343,7 @@ async function main() {
     const missingAt = photoReads;
     await fetch(`${base}/api/spotlight/photo/${noPhoto}`);
     assert.equal(photoReads, missingAt);
-    const generic = Buffer.from(await (await fetch(`${base}/api/spotlight/og/${noPhoto}.jpg`)).arrayBuffer());
+    const generic = Buffer.from(await (await fetch(`${base}/api/spotlight/og/26K91A9999.jpg`)).arrayBuffer());
     // Hide after every public cache has been warmed.
     await post(`/api/spotlight/admin/students/${first}/hide`, { admin: true });
     assert.ok(!(await request('/api/spotlight/students?course=civil')).body.students.length);
@@ -396,8 +396,9 @@ async function main() {
     assert.equal((await request('/api/spotlight/config', { cookie: verificationCookie })).body.turnstileVerified, false);
     assert.equal((await request('/api/spotlight/config', { cookie: `${verifiedLike.cookies}x` })).body.turnstileVerified, false);
     delete loader.env.TURNSTILE_SITE_KEY; delete loader.env.TURNSTILE_SECRET;
+    await require('./test-spotlight-avatars').runAvatarChecks({ first, noPhoto, db, loader, request, post, directory });
     if (process.argv.includes('--browser')) {
-      await require('./test-spotlight-browser').runBrowserChecks({ base, first, db, loader });
+      await require('./test-spotlight-browser').runBrowserChecks({ base, first, noPhoto, db, loader });
     }
 
     // Private import: normalization, null section, resized photos, safe upsert, no data reset.

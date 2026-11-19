@@ -2,7 +2,7 @@
 // Requires Playwright in the testing environment, not in the application's production dependencies.
 const assert = require('node:assert/strict');
 
-async function runBrowserChecks({ base, first, db, loader }) {
+async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({
     headless: true,
@@ -111,6 +111,7 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await adminPage.locator('[data-admin-tab=students]').click();
     await adminPage.locator('#adminContent input').fill(first);
     await adminPage.locator(`[data-roll="${first}"]`).waitFor();
+    await require('./test-spotlight-avatar-browser').runAvatarBrowserChecks({ context, page, adminPage, base, first, noPhoto });
     await adminPage.locator(`[data-roll="${first}"][data-visibility-action=hide]`).click();
     await adminPage.locator(`[data-roll="${first}"][data-visibility-action=unhide]`).waitFor();
     await page.reload();

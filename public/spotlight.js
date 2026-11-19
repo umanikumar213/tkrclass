@@ -109,7 +109,10 @@
     image.loading = 'lazy';
     image.decoding = 'async';
     image.src = `/api/spotlight/photo/${encodeURIComponent(student.roll_number)}`;
-    image.addEventListener('error', () => image.remove(), { once: true });
+    image.addEventListener('error', () => {
+      image.addEventListener('error', () => image.remove(), { once: true });
+      image.src = `/api/spotlight/avatar/${encodeURIComponent(student.roll_number)}.svg`;
+    }, { once: true });
     avatar.append(image);
     return avatar;
   };
@@ -965,7 +968,49 @@
            if (student.hidden) copy.append(make('span', 'sp-badge', t('hidden_label')));
            const button = make('button', `sp-btn ${student.hidden ? 'sp-btn-secondary' : 'sp-btn-danger'}`, student.hidden ? t('unhide_label') : t('hide_label'));
             button.type = 'button'; button.dataset.visibilityAction = student.hidden ? 'unhide' : 'hide'; button.dataset.roll = student.roll_number;
-            row.append(copy, button); content.append(row);
+             row.append(copy, button);
+             const tools = make('div', 'sp-admin-avatar-tools');
+             const preview = make('span', 'sp-avatar', initials(student.name));
+             const image = document.createElement('img');
+             const avatarUrl = `/api/spotlight/avatar/${encodeURIComponent(student.roll_number)}.svg`;
+             image.src = avatarUrl;
+             image.width = 48; image.height = 48; image.loading = 'lazy';
+             image.alt = student.name || t('student_fallback');
+             image.addEventListener('error', () => image.remove());
+             preview.append(image);
+             const label = make('label', 'sp-admin-avatar-label', t('avatar_style_label'));
+             const select = document.createElement('select');
+             select.className = 'sp-filter-select';
+             select.dataset.avatarRoll = student.roll_number;
+             ['neutral', 'male', 'female'].forEach(group => {
+               const option = document.createElement('option');
+               option.value = group; option.textContent = t(`avatar_style_${group}`);
+               select.append(option);
+             });
+             select.value = student.avatar_group || 'neutral';
+             select.addEventListener('change', async () => {
+               const previous = student.avatar_group || 'neutral';
+               const group = select.value;
+               select.disabled = true;
+               try {
+                 const result = await getJSON(`/api/spotlight/admin/students/${encodeURIComponent(student.roll_number)}/avatar`, {
+                   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar_group: group }),
+                 });
+                 if (result.success !== true || typeof result.avatar_url !== 'string') throw new Error(t('avatar_save_failed'));
+                 const url = new URL(result.avatar_url, location.origin);
+                 if (url.origin !== location.origin || url.pathname !== avatarUrl) throw new Error(t('avatar_save_failed'));
+                 student.avatar_group = group;
+                 image.src = url.href;
+                 if (!image.isConnected) preview.append(image);
+                 showToast(t('avatar_saved'));
+               } catch (error) {
+                 select.value = previous;
+                 handleAdminError(error);
+               } finally { select.disabled = false; }
+             });
+             label.append(select);
+             tools.append(preview, label);
+             row.append(tools); content.append(row);
           });
         }
         search.addEventListener('input', () => {
@@ -1028,6 +1073,9 @@
       try {
         const data = await getJSON(`/api/spotlight/admin/students?q=${encodeURIComponent(state.search)}`);
         if (request !== studentRequest || state.tab !== 'students') return;
+        for (const [key, value] of Object.entries(data.texts || {})) {
+          if (typeof value === 'string' && key.startsWith('avatar_')) spotlightTexts[key] = value;
+        }
         state.students = Array.isArray(data.students) ? data.students.slice(0, 50) : [];
         renderAdminContent();
         if (focused) {

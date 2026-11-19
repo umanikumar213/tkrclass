@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node scripts/test-chat-admin-posts.js && node scripts/test-spotlight.js",
-    "import:students": "node scripts/import-students.js"
+    "import:students": "node scripts/import-students.js",
+    "import:genders": "node scripts/import-genders.js"
   },
   "engines": {
     "node": "20.x"
@@ -15,6 +16,8 @@
     "qs": "^6.16.2"
   },
   "dependencies": {
+    "@dicebear/collection": "^9.4.2",
+    "@dicebear/core": "^9.4.3",
     "axios": "^1.7.2",
     "axios-cookiejar-support": "^5.0.2",
     "cheerio": "^1.0.0-rc.12",

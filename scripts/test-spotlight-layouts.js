@@ -34,7 +34,7 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         surface: getComputedStyle(root).getPropertyValue('--surface').trim(),
         background: getComputedStyle(root).getPropertyValue('--bg').trim(),
         externalScripts: [...document.scripts].map(s => s.src).filter(src => src && new URL(src).origin !== location.origin),
-        widestPhoto: Math.max(0, ...[...document.querySelectorAll('img[src*=\"/api/spotlight/photo/\"]')].map(img => img.getBoundingClientRect().width)),
+        widestPhoto: Math.max(0, ...[...document.querySelectorAll('img[src*=\"/api/spotlight/photo/\"],img[src*=\"/api/spotlight/avatar/\"]')].map(img => img.getBoundingClientRect().width)),
       };
     });
     assert.ok(metrics.scrollWidth <= metrics.width, `${label}: horizontal page overflow (${metrics.scrollWidth}/${metrics.width})`);

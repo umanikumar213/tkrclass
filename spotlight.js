@@ -3,13 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('./db');
 const { initSpotlightSchema } = require('./lib/spotlight-db');
-const { hiddenRolls, initSpotlightMedia, getPhoto, getOg, sendImage } = require('./lib/spotlight-media');
+const { hiddenRolls, initSpotlightMedia, getPhoto, getAvatar, getOg, sendImage } = require('./lib/spotlight-media');
 const {
   identity, spotlightLimit, verifyTurnstile, turnstileEnabled, turnstileVerified,
   deviceHash, readSignedCookie, setSignedCookie,
 } = require('./lib/spotlight-security');
 const { getContent, contentMiddleware, message } = require('./lib/spotlight-settings');
-const { format } = require('./lib/spotlight-texts');
+const { format, definitions } = require('./lib/spotlight-texts');
 const {
   fields, lists, boards, filters, clearProfile, clearSpotlightCaches,
   fail, transaction, lockStudent, lockNote, publicProfile,
@@ -71,7 +71,10 @@ router.get('/spotlight/:roll', validateRoll, wrap(async (req, res) => {
 
 router.get('/api/spotlight/texts', wrap(async (req, res) => {
   // The process cache lasts five minutes; no browser/CDN cache can outlive an admin save.
-  res.set('Cache-Control', 'no-store').json(await getContent());
+  const content = await getContent();
+  res.set('Cache-Control', 'no-store').json({
+    ...content, texts: Object.fromEntries(Object.entries(content.texts).filter(([key]) => !definitions[key]?.adminOnly)),
+  });
 }));
 router.get('/api/spotlight/config', identity, (req, res) => {
   res.set('Cache-Control', 'no-store').json({
@@ -158,6 +161,11 @@ router.get('/api/spotlight/leaderboard', wrap(async (req, res) => {
 }));
 
 const imageLimit = spotlightLimit(300, 60000);
+router.get('/api/spotlight/avatar/:roll.svg', imageLimit, validateRoll, wrap(async (req, res) => {
+  const svg = await getAvatar(req.roll);
+  if (!svg || hiddenRolls.has(req.roll)) return res.status(404).set('Cache-Control', 'no-store').end();
+  sendImage(req, res, svg, 'image/svg+xml');
+}));
 router.get('/api/spotlight/photo/:roll', imageLimit, validateRoll, wrap(async (req, res) => {
   const photo = await getPhoto(req.roll);
   if (!photo || hiddenRolls.has(req.roll)) return res.status(404).set('Cache-Control', 'no-store').end();
