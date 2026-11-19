@@ -8,6 +8,7 @@
   <title data-sp-text="notes_feed_page_title">Latest notes · TKR Spotlight</title>
   <link rel="stylesheet" href="/spotlight.css?v=20261120a">
   <script defer src="/spotlight-ui.js?v=20261120a"></script>
+  <script defer src="/spotlight-feed.js?v=20261120a"></script>
   <script defer src="/spotlight.js?v=20261120a"></script>
 </head>
 <body data-spotlight-page="notes">
@@ -31,8 +32,8 @@
           <h1 class="sp-title" data-sp-text="notes_feed_title">Latest notes</h1>
           <p class="sp-intro" data-sp-text="notes_feed_subtitle">Kind words from across campus, freshest first.</p>
         </div>
-        <button type="button" class="sp-new-notes" id="notesFeedNew" data-sp-text="notes_feed_new" hidden>New notes</button>
       </div>
+      <button type="button" class="sp-new-notes" id="notesFeedNew" data-sp-text="notes_feed_new" hidden>New notes</button>
       <div id="notesFeed" class="sp-feed-list" aria-live="polite"></div>
       <div id="notesFeedSentinel" class="sp-feed-sentinel" aria-hidden="true"></div>
       <div id="notesFeedControls" class="sp-feed-controls" hidden>

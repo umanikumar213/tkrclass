@@ -10,6 +10,10 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     args: ['--no-sandbox'],
   });
   try {
+    if (process.argv.includes('--notes-browser')) {
+      await require('./test-spotlight-notes-browser').runNotesBrowserChecks({ browser, base, db, loader, noPhoto });
+      return;
+    }
     const browserNetwork = '203.0.113.80';
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': browserNetwork },
@@ -213,6 +217,7 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     assert.deepEqual(errors, []);
     await context.close();
     await require('./test-spotlight-layouts').runLayoutChecks({ browser, base, first, db, loader });
+    await require('./test-spotlight-notes-browser').runNotesBrowserChecks({ browser, base, db, loader, noPhoto });
     console.log('PASS: phone browser discovery, pagination, safe text, persistent likes/reactions, note review, reporting, sharing, visibility controls, and logout.');
   } finally { await browser.close(); }
 }

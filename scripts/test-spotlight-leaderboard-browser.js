@@ -6,11 +6,13 @@ async function checkPublicNavigation(page, kind) {
     const nav = page.locator(selector);
     const order = await nav.locator(':scope > :is(a,button)').evaluateAll(nodes =>
       nodes.map(node => node.tagName === 'BUTTON' ? 'random' : new URL(node.href).pathname));
-    assert.deepEqual(order, ['/spotlight', '/spotlight/leaderboard', 'random', '/']);
+    assert.deepEqual(order, ['/spotlight', '/spotlight/leaderboard', '/spotlight/notes', '/']);
+    assert.equal(await nav.locator('[data-sp-text=leaderboard_nav_emoji]').textContent(), '🏆');
+    assert.equal(await nav.locator('[data-sp-text=notes_nav_emoji]').textContent(), '💌');
     assert.equal(await nav.isVisible(), selector === '.sp-bottom-nav' ? mobile : !mobile);
     const current = nav.locator('[aria-current="page"]');
     assert.equal(await current.count(), 1);
-    assert.equal(await current.getAttribute('href'), kind === 'leaderboard' ? '/spotlight/leaderboard' : '/spotlight');
+    assert.equal(await current.getAttribute('href'), kind === 'leaderboard' ? '/spotlight/leaderboard' : kind === 'notes' ? '/spotlight/notes' : '/spotlight');
   }
   if (mobile) {
     const nav = await page.locator('.sp-bottom-nav').boundingBox();
@@ -33,11 +35,13 @@ async function checkPublicNavigation(page, kind) {
 }
 
 async function checkLeaderboardPage({ page, base, checkPage, screenshot, label }) {
-  await page.goto(`${base}/spotlight/leaderboard?tab=liked`);
+  await page.goto(`${base}/spotlight/leaderboard`);
+  await page.waitForURL('**/spotlight/leaderboard?tab=liked');
   await page.locator('#leaderboard a').first().waitFor();
   await checkPage(page, `Leaderboard ${label}`);
   await checkPublicNavigation(page, 'leaderboard');
   assert.equal(await page.locator('[data-leader-tab=liked]').getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await page.locator('[data-leader-tab]').evaluateAll(nodes => nodes.map(node => node.dataset.leaderTab)), ['liked', 'noted', 'trending']);
   const ranks = page.locator('.sp-podium-card');
   assert.deepEqual(await ranks.evaluateAll(nodes => nodes.map(node => Number(node.className.match(/sp-podium-rank-(\d)/)[1]))), [2, 1, 3]);
   const positions = await ranks.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().x));

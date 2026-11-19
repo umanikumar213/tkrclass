@@ -2636,7 +2636,9 @@ textarea.sp-settings-input {
   position: sticky;
   top: calc(72px + var(--safe-top));
   z-index: 14;
-  display: inline-flex;
+  display: flex;
+  width: max-content;
+  margin: 0 auto 12px;
   min-height: 40px;
   align-items: center;
   justify-content: center;
@@ -2678,6 +2680,7 @@ textarea.sp-settings-input {
 .sp-feed-student .sp-avatar {
   width: 40px;
   height: 40px;
+  border-radius: 50%;
   font-size: 11px;
 }
 

@@ -90,18 +90,18 @@ async function main() {
           i === 1 ? 'CIVIL' : 'CSE', i === 1 ? null : 'A', '1st Year', i <= 2 ? photo : null]);
     }
     const releaseAssets = new Set();
-    for (const url of ['/spotlight', '/spotlight/leaderboard', '/spotlight/admin', `/spotlight/${first}`]) {
+    for (const url of ['/spotlight', '/spotlight/leaderboard', '/spotlight/notes', '/spotlight/admin', `/spotlight/${first}`]) {
       const html = await request(url);
       assert.equal(html.status, 200);
       assert.equal(html.response.headers.get('cache-control'), 'no-store');
       assert.equal(html.response.headers.get('cdn-cache-control'), 'no-store');
-      assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor|-counts)?\.(?:js|css)"/);
+      assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor|-counts|-feed)?\.(?:js|css)"/);
       assert.doesNotMatch(html.body, /\/spotlight-assets\//);
-      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor|-counts)?\.(?:css|js)\?v=[a-z0-9]+)"/g)];
+      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor|-counts|-feed)?\.(?:css|js)\?v=[a-z0-9]+)"/g)];
       assert.ok(links.length >= 3, 'Every Spotlight page must use version queries for CSS and scripts');
       for (const [, asset] of links) releaseAssets.add(asset);
     }
-    assert.equal(releaseAssets.size, 5, 'All five Spotlight assets share this release');
+    assert.equal(releaseAssets.size, 6, 'All six Spotlight assets share this release');
     assert.equal(new Set([...releaseAssets].map(url => new URL(url, base).searchParams.get('v'))).size, 1);
     for (const url of releaseAssets) {
       const asset = await request(url);
@@ -400,7 +400,8 @@ async function main() {
     assert.equal((await request('/api/spotlight/config', { cookie: `${verifiedLike.cookies}x` })).body.turnstileVerified, false);
     delete loader.env.TURNSTILE_SITE_KEY; delete loader.env.TURNSTILE_SECRET;
     await require('./test-spotlight-avatars').runAvatarChecks({ first, noPhoto, db, loader, request, post, directory });
-    if (process.argv.includes('--browser')) {
+    await require('./test-spotlight-notes-feed').runNotesFeedChecks({ request, post, db, loader, noPhoto });
+    if (process.argv.includes('--browser') || process.argv.includes('--notes-browser')) {
       await require('./test-spotlight-browser').runBrowserChecks({ base, first, noPhoto, db, loader });
     }
 
