@@ -82,6 +82,17 @@
     transition:transform .18s ease;
   }
   .spotlight-cta:hover .spotlight-arrow{transform:translateX(3px)}
+  .home-instagram{
+    position:fixed;right:calc(20px + env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    z-index:20;display:grid;place-items:center;width:50px;height:50px;border-radius:16px;
+    color:#fff;background:linear-gradient(135deg,#7135b5,#cf357d 65%,#ef8b3c);
+    border:1px solid rgba(255,255,255,.65);box-shadow:0 5px 18px rgba(113,53,181,.25);
+    text-decoration:none;transition:transform .18s ease,box-shadow .18s ease;
+  }
+  .home-instagram svg{width:25px;height:25px}
+  .home-instagram:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(113,53,181,.32)}
+  .home-instagram:active{transform:scale(.96)}
+  .home-instagram:focus-visible{outline:3px solid #71389b;outline-offset:4px}
   @media(max-width:360px){
     .spotlight-cta{gap:11px;padding:12px}
     .spotlight-cta .spotlight-mark{width:42px;height:42px}
@@ -227,7 +238,7 @@
       </span>
       <span class="spotlight-copy">
         <span class="spotlight-title">TKR Spotlight</span>
-        <span class="spotlight-subtitle">Give a classmate their moment</span>
+        <span class="spotlight-subtitle">THE UNFILTERED TKR</span>
       </span>
       <svg class="spotlight-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M4.5 12h14m-5.5-5.5L18.5 12 13 17.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -430,5 +441,12 @@ document.getElementById('roll').addEventListener('keypress',e=>{if(e.key==='Ente
   if(saved){document.getElementById('roll').value=saved;document.getElementById('rememberMe').checked=true;}
 })();
 </script>
+<a class="home-instagram" href="https://www.instagram.com/my.own.gravityy?cnvx=MTNlZW1xcDdjYnd1eg==" target="_blank" rel="noopener noreferrer" aria-label="Visit my.own.gravityy on Instagram (opens in a new tab)">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.8"/>
+    <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+    <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor"/>
+  </svg>
+</a>
 </body>
 </html>
