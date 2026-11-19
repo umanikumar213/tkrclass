@@ -4,6 +4,18 @@
 
 TKRClass is a Node.js 20 / Express application providing attendance lookup, an anonymous confession board, a separate night-only Reyi feed, and password-protected moderation. PostgreSQL stores content and reactions; Telegram stores video files. Route/file inventories and deployment configuration are in `replit.md`. This document describes the current controls and residual risks, not a security certification.
 
+## Spotlight controls and limitations
+
+Spotlight exposes an approved student directory, moderated notes and aggregate appreciation counts. Approved student names, roll numbers, academic details and permitted photos are public; voter, IP and device hashes must never be included in public responses. Hiding a student blocks new server-side directory/profile/photo access. Previously downloaded or seven-day immutable browser/CDN image copies cannot be recalled.
+
+Likes use the existing signed visitor cookie plus HMAC-hashed IP and device checks. The browser hashes only the specified device attributes with SHA-256; the server stores a second HMAC using `SESSION_SECRET`, not the raw fingerprint or unhashed IP. Existing likes retain null device hashes after the additive migration. A parent student row lock serializes checks and counter updates. By default an IP can maintain one like per profile across the lifetime of stored likes and one device can maintain one like per profile. Only the original signed voter can remove that voter's like. Administrative IP ceilings, device checks and hourly limits are configurable and server-validated.
+
+This is not identity verification. Fingerprints can be spoofed, collide or change; clearing cookies plus changing IP and device values can evade checks. Shared college Wi-Fi/NAT may falsely block different students. Hashes remain pseudonymous, potentially linkable identifiers, not anonymous data; protect database access and use an appropriate privacy notice. Rate limits are per process and must not be described as distributed protection.
+
+Optional Cloudflare Turnstile is verified server-side, with a purpose-separated signed HttpOnly cookie remembering success for 24 hours. It is bound to the signed visitor identity, rejects expired/future/tampered signatures, and is Secure on HTTPS. It reduces repeat challenges, not duplicate identity abuse.
+
+`spotlight_settings` stores only validated, admin-authenticated overrides. Unknown keys, oversized copy, incorrect types, out-of-range numbers and unsafe removal links are rejected atomically. Public pages insert copy with `textContent`; server-rendered OG values and generic-image text are escaped. Saving invalidates the five-minute content cache and Spotlight metadata caches. This does not affect the existing CSP, board authentication, attendance or board data. A compromised shared admin credential can still alter public copy and settings; separate accounts and a dedicated audit log are not implemented.
+
 ## Assets
 
 - **Secrets and privileged access:** `ADMIN_PASSWORD`, `SESSION_SECRET`, the database connection string, and Telegram credentials. Their compromise permits moderation abuse, identity/session forgery, data access, or video-storage abuse.

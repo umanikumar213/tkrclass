@@ -62,9 +62,17 @@ async function main() {
       const text = await response.text();
       let data;
       try { data = JSON.parse(text); } catch { data = text; }
-      return { status: response.status, body: data, response, cookie: response.headers.get('set-cookie')?.split(';')[0] };
+      return { status: response.status, body: data, response,
+        cookie: response.headers.get('set-cookie')?.split(';')[0],
+        cookies: response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
     };
-    const post = (url, options = {}) => request(url, { method: 'POST', ...options });
+    const device = value => crypto.createHash('sha256').update(value).digest('hex');
+    const post = (url, options = {}) => {
+      if (url.endsWith('/like')) options = {
+        ...options, body: { device_hash: device(options.network || ip(1)), ...options.body },
+      };
+      return request(url, { method: 'POST', ...options });
+    };
     const photo = await sharp({ create: { width: 320, height: 240, channels: 3, background: '#5b45d9' } }).webp().toBuffer();
     const first = '26K91A0101', second = '26K91A0102', noPhoto = '26K91A0103';
     for (let i = 1; i <= 35; i++) {
@@ -91,9 +99,52 @@ async function main() {
     assert.ok(!filters.sections.some(row => row.course === 'CIVIL'));
     assert.ok(filters.courses.some(row => row.course === 'CIVIL'));
     for (const tab of ['trending', 'liked', 'noted']) {
-      assert.equal((await request(`/api/spotlight/leaderboard?tab=${tab}`)).body.students.length, 20);
+      assert.equal((await request(`/api/spotlight/leaderboard?tab=${tab}`)).body.students.length, 0);
     }
-    assert.match((await request('/api/spotlight/random')).body.roll_number, /^[A-Z0-9]{10}$/);
+    // Default random eligibility excludes every first-year test profile.
+    assert.equal((await request('/api/spotlight/random')).status, 404);
+    const contentBefore = (await request('/api/spotlight/texts')).body;
+    assert.equal(contentBefore.settings.like_max_per_ip_per_profile, 1);
+    assert.equal(contentBefore.settings.like_device_check, true);
+    assert.equal(contentBefore.settings.like_rate_per_hour, 30);
+    assert.equal((await request('/api/spotlight/admin/settings', { network: ip(40) })).status, 401);
+    assert.equal((await post('/api/spotlight/admin/settings', {
+      network: ip(41), body: { changes: { brand_name: 'Not allowed' } },
+    })).status, 401);
+    const save = changes => post('/api/spotlight/admin/settings', { admin: true, body: { changes } });
+    assert.equal((await save({ brand_name: 'Campus <Friends>', random_profile_years: ['1st Year'] })).status, 200);
+    assert.equal((await request('/api/spotlight/texts')).body.texts.brand_name, 'Campus <Friends>');
+    assert.equal((await save({ does_not_exist: 'No' })).status, 400);
+    assert.equal((await save({ brand_name: 'x'.repeat(81) })).status, 400);
+    assert.equal((await save({ like_device_check: 'false' })).status, 400);
+    assert.equal((await save({ like_rate_per_hour: 0 })).status, 400);
+    assert.equal((await save({ leaderboard_size: 1.5 })).status, 400);
+    assert.equal((await save({ random_profile_years: '1st Year' })).status, 400);
+    assert.equal((await save({ random_profile_years: ['1st Year', '1st Year'] })).status, 400);
+    assert.equal((await save({ profile_remove_url: 'javascript:alert(1)' })).status, 400);
+    assert.equal((await save({ profile_remove_url: '//untrusted.example' })).status, 400);
+    assert.equal((await save({ profile_remove_url: 'mailto:admin@example.test' })).status, 200);
+    await save({ profile_remove_url: null });
+    assert.equal((await save({ brand_name: 'Must not be saved', unknown: 'no' })).status, 400);
+    assert.equal((await request('/api/spotlight/texts')).body.texts.brand_name, 'Campus <Friends>');
+    const random1 = await request('/api/spotlight/random');
+    assert.match(random1.body.roll_number, /^[A-Z0-9]{10}$/);
+    const random2 = await request('/api/spotlight/random', { cookie: random1.cookies });
+    assert.notEqual(random2.body.roll_number, random1.body.roll_number);
+    assert.equal((await db.query('SELECT year FROM spotlight_students WHERE roll_number=$1', [random2.body.roll_number])).rows[0].year, '1st Year');
+    // One eligible visible record must not be returned twice in a row.
+    await db.query('UPDATE spotlight_students SET year=$2 WHERE roll_number=$1', [second, '4th Year']);
+    await save({ random_profile_years: ['4th Year'] });
+    const onlyRandom = await request('/api/spotlight/random');
+    assert.equal(onlyRandom.body.roll_number, second);
+    assert.equal((await request('/api/spotlight/random', { cookie: onlyRandom.cookies })).status, 404);
+    await post(`/api/spotlight/admin/students/${second}/hide`, { admin: true });
+    assert.equal((await request('/api/spotlight/random')).status, 404);
+    await post(`/api/spotlight/admin/students/${second}/unhide`, { admin: true });
+    await db.query('UPDATE spotlight_students SET year=$2 WHERE roll_number=$1', [second, '1st Year']);
+    await save({ brand_name: null, random_profile_years: null });
+    assert.equal((await request('/api/spotlight/texts')).body.texts.brand_name, contentBefore.texts.brand_name);
+    assert.equal((await db.query("SELECT 1 FROM spotlight_settings WHERE key='brand_name'")).rowCount, 0);
     const redirect = await request(`/spotlight/${first.toLowerCase()}`, { redirect: 'manual' });
     assert.equal(redirect.status, 301);
     assert.equal(redirect.response.headers.get('location'), `/spotlight/${first}`);
@@ -102,6 +153,11 @@ async function main() {
     assert.ok(html.body.includes('Student &lt;Unsafe &amp; &quot;Name&quot;&gt; on TKR Spotlight'));
     assert.ok(html.body.includes(`property="og:url" content="https://spotlight.example/spotlight/${first}"`));
     assert.ok(html.body.includes(`property="og:image" content="https://spotlight.example/api/spotlight/og/${first}.jpg"`));
+    await save({ brand_name: '<Friends & Campus>', og_title: '{name} on {brand} — hello' });
+    const editedMeta = await request(`/spotlight/${first}`);
+    assert.ok(editedMeta.body.includes('on &lt;Friends &amp; Campus&gt; — hello'));
+    assert.ok(!editedMeta.body.includes('on <Friends & Campus>'));
+    await save({ brand_name: null, og_title: null });
     delete loader.env.PUBLIC_URL;
     assert.ok((await request(`/spotlight/${first}`)).body.includes(`content="${base}/spotlight/${first}"`));
     loader.env.PUBLIC_URL = 'https://spotlight.example';
@@ -117,17 +173,48 @@ async function main() {
     assert.equal((await request(`/api/spotlight/students/${first}`, { network: ip(2) })).body.likedByMe, false);
     result = await post(`/api/spotlight/students/${first}/like`, { cookie: visitor });
     assert.deepEqual(result.body, { liked: false, like_count: 0 });
-    // Three distinct signed identities on the same network; the fourth is rejected.
+    // New cookies cannot bypass lifetime IP or hashed-device checks.
     assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: visitor })).body.like_count, 1);
-    assert.equal((await post(`/api/spotlight/students/${first}/like`)).body.like_count, 2);
-    assert.equal((await post(`/api/spotlight/students/${first}/like`)).body.like_count, 3);
-    assert.equal((await post(`/api/spotlight/students/${first}/like`)).status, 429);
+    const repeatIp = await post(`/api/spotlight/students/${first}/like`, { body: { device_hash: device('different-device') } });
+    assert.equal(repeatIp.status, 409);
+    assert.equal(repeatIp.body.liked, true);
+    assert.equal(repeatIp.body.like_count, 1);
+    assert.equal(repeatIp.body.message, contentBefore.texts.like_already);
+    await db.query("UPDATE spotlight_likes SET created_at=NOW()-INTERVAL '30 days' WHERE roll_number=$1", [first]);
+    assert.equal((await post(`/api/spotlight/students/${first}/like`)).status, 409);
+    const repeatDevice = await post(`/api/spotlight/students/${first}/like`, {
+      network: ip(2), body: { device_hash: device(ip(1)) },
+    });
+    assert.equal(repeatDevice.status, 409);
+    assert.equal((await request(`/api/spotlight/students/${first}?device_hash=${device(ip(1))}`, { network: ip(2) })).body.likedByMe, true);
+    const storedDevice = (await db.query('SELECT device_hash FROM spotlight_likes WHERE roll_number=$1', [first])).rows[0].device_hash;
+    assert.equal(storedDevice, crypto.createHmac('sha256', loader.env.SESSION_SECRET).update(device(ip(1))).digest('hex'));
+    assert.notEqual(storedDevice, device(ip(1)));
+    assert.equal((await post(`/api/spotlight/students/${first}/like`, { network: ip(2), body: { device_hash: null } })).status, 400);
+    // Increasing the IP setting allows multiple devices, but the device check still applies.
+    await save({ like_max_per_ip_per_profile: 2 });
+    const extra = await post(`/api/spotlight/students/${first}/like`, { body: { device_hash: device('different-device') } });
+    assert.equal(extra.status, 200);
+    assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: extra.cookie })).body.liked, false);
+    await save({ like_max_per_ip_per_profile: null });
     // Parallel identities cannot exceed the same-IP per-profile ceiling.
     const parallel = await Promise.all(Array.from({ length: 4 }, () =>
       post(`/api/spotlight/students/${second}/like`, { network: ip(3) })));
-    assert.equal(parallel.filter(r => r.status === 200).length, 3);
-    assert.equal(parallel.filter(r => r.status === 429).length, 1);
-    assert.equal((await db.query('SELECT like_count FROM spotlight_students WHERE roll_number=$1', [second])).rows[0].like_count, 3);
+    assert.equal(parallel.filter(r => r.status === 200).length, 1);
+    assert.equal(parallel.filter(r => r.status === 409).length, 3);
+    assert.equal((await db.query('SELECT like_count FROM spotlight_students WHERE roll_number=$1', [second])).rows[0].like_count, 1);
+    await save({ like_device_check: false });
+    assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(21), body: { device_hash: device(ip(3)) } })).status, 200);
+    await save({ like_device_check: null, leaderboard_size: 1 });
+    assert.equal((await request('/api/spotlight/leaderboard?tab=liked')).body.students.length, 1);
+    for (const tab of ['trending', 'liked', 'noted']) {
+      assert.ok((await request(`/api/spotlight/leaderboard?tab=${tab}`)).body.students.every(s => s.score > 0));
+    }
+    await save({ leaderboard_size: null });
+    await save({ like_rate_per_hour: 1 });
+    assert.equal((await post(`/api/spotlight/students/${noPhoto}/like`, { network: ip(22) })).status, 200);
+    assert.equal((await post(`/api/spotlight/students/${noPhoto}/like`, { network: ip(22) })).status, 429);
+    await save({ like_rate_per_hour: null });
 
     const noteText = '<script>kind words only</script>';
     assert.equal((await post(`/api/spotlight/students/${first}/notes`, { body: { text: noteText }, cookie: visitor, network: ip(4) })).status, 200);
@@ -234,8 +321,16 @@ async function main() {
     verifyResult = false;
     assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(15), body: { turnstileToken: 'invalid' } })).status, 400);
     verifyResult = true;
-    assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(15), body: { turnstileToken: 'valid' } })).status, 200);
+    const verifiedLike = await post(`/api/spotlight/students/${second}/like`, { network: ip(15), body: { turnstileToken: 'valid' } });
+    assert.equal(verifiedLike.status, 200);
+    assert.match(verifiedLike.cookies, /spotlight_verified=/);
     assert.equal(verifyCalls, 2);
+    assert.equal((await request('/api/spotlight/config', { cookie: verifiedLike.cookies })).body.turnstileVerified, true);
+    assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(15), cookie: verifiedLike.cookies })).status, 200);
+    assert.equal(verifyCalls, 2, 'Remembered verification must avoid repeated verification calls');
+    const verificationCookie = verifiedLike.cookies.split('; ').find(c => c.startsWith('spotlight_verified='));
+    assert.equal((await request('/api/spotlight/config', { cookie: verificationCookie })).body.turnstileVerified, false);
+    assert.equal((await request('/api/spotlight/config', { cookie: `${verifiedLike.cookies}x` })).body.turnstileVerified, false);
     delete loader.env.TURNSTILE_SITE_KEY; delete loader.env.TURNSTILE_SECRET;
     if (process.argv.includes('--browser')) {
       await require('./test-spotlight-browser').runBrowserChecks({ base, first, db, loader });
@@ -260,7 +355,7 @@ async function main() {
     assert.equal(summary.photosWithoutStudent[0], '26K91A0198');
     const imported = (await db.query('SELECT * FROM spotlight_students WHERE roll_number=$1', [first])).rows[0];
     assert.equal(imported.name, 'Imported Person'); assert.equal(imported.course, 'CIVIL'); assert.equal(imported.section, null);
-    assert.equal(imported.like_count, 3);
+    assert.equal(imported.like_count, 1);
     assert.equal((await sharp(imported.photo_data).metadata()).width, 200);
     assert.equal((await sharp(imported.photo_data).metadata()).height, 200);
     await importer.importStudents({ file: input, photosDir, log() {} });

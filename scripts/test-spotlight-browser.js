@@ -10,7 +10,10 @@ async function runBrowserChecks({ base, first, db, loader }) {
     args: ['--no-sandbox'],
   });
   try {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const browserNetwork = '203.0.113.80';
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': browserNetwork },
+    });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -37,9 +40,24 @@ async function runBrowserChecks({ base, first, db, loader }) {
     // Browser context has its own signed identity and a different IP from the integration fixture.
     await page.locator('[data-like-button]').click();
     await page.waitForFunction(() => document.querySelector('[data-like-button]').getAttribute('aria-pressed') === 'true');
-    assert.equal(await page.locator('#profileLikeCount').textContent(), '4');
+    assert.equal(await page.locator('#profileLikeCount').textContent(), '2');
+    assert.match(await page.locator('[data-like-button]').textContent(), /💘 Liked · 2/);
+    assert.ok(!(await page.locator('[data-like-button]').textContent()).includes('+1'));
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
+    // A fresh private browsing context on the same network/device cannot add another like.
+    const privateContext = await browser.newContext({
+      viewport: { width: 390, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': browserNetwork },
+    });
+    const privatePage = await privateContext.newPage();
+    await privatePage.goto(`${base}/spotlight/${first}`);
+    await privatePage.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
+    const blocked = privatePage.waitForResponse(r => r.url().endsWith('/like') && r.status() === 409);
+    await privatePage.locator('[data-like-button]').click();
+    await blocked;
+    assert.equal(await privatePage.locator('#profileLikeCount').textContent(), '2');
+    assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'true');
+    await privateContext.close();
     await page.locator('#noteText').fill('A kind browser test note');
     assert.equal(await page.locator('#noteCounter').textContent(), '24 / 200');
     await page.locator('#noteSubmit').click();
@@ -90,6 +108,45 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
     await page.locator('[data-like-button]').click();
     await page.waitForFunction(() => document.querySelector('[data-like-button]').getAttribute('aria-pressed') === 'false');
+    await adminPage.locator('[data-admin-tab=settings]').click();
+    await adminPage.locator('#setting-brand_name').waitFor();
+    const saveSettings = async () => {
+      const outgoing = adminPage.waitForRequest(r => r.method() === 'POST' && r.url().endsWith('/admin/settings'));
+      const response = adminPage.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/admin/settings'));
+      await adminPage.locator('.sp-settings-save').click();
+      const body = (await outgoing).postDataJSON();
+      assert.equal((await response).status(), 200);
+      await adminPage.waitForFunction(() => {
+        const button = document.querySelector('.sp-settings-save');
+        return button && button.disabled && !document.querySelector('#adminContent input:disabled');
+      });
+      return body.changes;
+    };
+    await adminPage.locator('#setting-brand_name').fill('Campus <Edited>');
+    assert.equal(await adminPage.locator('#setting-brand_name').inputValue(), 'Campus <Edited>');
+    assert.deepEqual(await saveSettings(), { brand_name: 'Campus <Edited>' });
+    await page.goto(`${base}/spotlight`);
+    await page.locator('.sp-brand-name', { hasText: 'Campus <Edited>' }).waitFor();
+    assert.equal(await page.locator('.sp-brand-name edited').count(), 0);
+    await adminPage.locator('.sp-settings-field', { has: adminPage.locator('#setting-brand_name') }).locator('.sp-settings-reset').click();
+    assert.equal(await adminPage.locator('#setting-brand_name').inputValue(), 'TKR Spotlight');
+    assert.deepEqual(await saveSettings(), { brand_name: null });
+    await page.reload();
+    await page.locator('.sp-brand-name', { hasText: 'TKR Spotlight' }).waitFor();
+    assert.equal(await adminPage.locator('#setting-like_device_check').isChecked(), true);
+    const years = adminPage.locator('#setting-random_profile_years');
+    await years.locator('input[data-year="1st Year"]').check();
+    await years.locator('input[data-year="3rd Year"]').uncheck();
+    await years.locator('input[data-year="4th Year"]').uncheck();
+    assert.deepEqual(await saveSettings(), { random_profile_years: ['1st Year'] });
+    const firstRandom = await context.request.get(`${base}/api/spotlight/random`);
+    assert.equal(firstRandom.status(), 200);
+    const roll1 = (await firstRandom.json()).roll_number;
+    const nextRandom = await context.request.get(`${base}/api/spotlight/random`);
+    assert.equal(nextRandom.status(), 200);
+    assert.notEqual((await nextRandom.json()).roll_number, roll1);
+    await adminPage.locator('.sp-settings-field', { has: adminPage.locator('#setting-random_profile_years') }).locator('.sp-settings-reset').click();
+    assert.deepEqual(await saveSettings(), { random_profile_years: null });
     await adminPage.locator('#adminLogout').click();
     await adminPage.locator('#adminLoginView:not([hidden])').waitFor();
     assert.equal(await adminPage.locator('#adminPassword').inputValue(), '');

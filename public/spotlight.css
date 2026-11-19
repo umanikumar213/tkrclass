@@ -173,6 +173,21 @@ a{color:inherit}
 .sp-hero .sp-title{font-size:clamp(34px,8vw,48px)}
 .sp-error-page{max-width:480px;margin:14vh auto;text-align:center}
 .sp-error-page .sp-title{font-size:36px}
+.sp-settings-group{margin:18px 0;padding:15px;border:1px solid var(--sp-line);border-radius:14px;background:var(--sp-paper)}
+.sp-settings-group>.sp-section-title{margin-bottom:12px}
+.sp-settings-field{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--sp-line-soft)}
+.sp-settings-field:first-of-type{border-top:0}
+.sp-settings-label{font-size:12px;font-weight:700;color:var(--sp-ink)}
+.sp-settings-current,.sp-settings-default,.sp-settings-counter{color:var(--sp-muted);font-size:10px;overflow-wrap:anywhere}
+.sp-settings-default{color:var(--sp-dim)}
+.sp-settings-input{margin-top:2px}
+.sp-settings-years{display:flex;flex-wrap:wrap;gap:8px;border:0;padding:0;margin:2px 0}
+.sp-settings-check{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--sp-line);border-radius:999px;background:#fff;font-size:11px}
+.sp-settings-check input{accent-color:var(--sp-accent)}
+.sp-settings-reset{justify-self:start;padding:3px 0}
+.sp-settings-footer{position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:12px 0;background:linear-gradient(transparent,var(--sp-bg) 20%)}
+#spotlightTextsError{margin:12vh auto;max-width:440px}
+#spotlightTextsError .sp-btn{margin-top:12px}
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid #8b82d9;outline-offset:3px}
 @keyframes sp-arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}

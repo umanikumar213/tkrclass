@@ -13,6 +13,38 @@
     node.textContent = text || '';
     node.className = `sp-message${text ? ` show ${kind || 'error'}` : ''}`;
   };
+  let spotlightTexts = {};
+  let spotlightSettings = {};
+  const t = (key) => String(spotlightTexts[key] ?? '');
+  const copyText = (key, values = {}) => t(key).replace(/\{([a-z_]+)\}/gi, (whole, name) =>
+    Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : whole);
+  const applyStaticCopy = () => {
+    document.querySelectorAll('[data-sp-text]').forEach((node) => {
+      if (Object.prototype.hasOwnProperty.call(spotlightTexts, node.dataset.spText)) node.textContent = t(node.dataset.spText);
+    });
+    document.querySelectorAll('[data-sp-placeholder]').forEach((node) => {
+      if (Object.prototype.hasOwnProperty.call(spotlightTexts, node.dataset.spPlaceholder)) node.setAttribute('placeholder', t(node.dataset.spPlaceholder));
+    });
+    document.querySelectorAll('[data-sp-aria]').forEach((node) => {
+      if (Object.prototype.hasOwnProperty.call(spotlightTexts, node.dataset.spAria)) node.setAttribute('aria-label', t(node.dataset.spAria));
+    });
+    document.querySelectorAll('[data-sp-href]').forEach((node) => {
+      const raw = t(node.dataset.spHref).trim();
+      let href = '#';
+      if (raw === '#') href = '#';
+      else if (raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\') && !/[\u0000-\u001f]/.test(raw)) href = raw;
+      else if (/^(https?:\/\/|mailto:)/i.test(raw)) {
+        try {
+          const parsed = new URL(raw);
+          if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:') href = raw;
+        } catch { href = '#'; }
+      }
+      node.setAttribute('href', href);
+    });
+    document.querySelectorAll('[data-sp-template]').forEach((node) => {
+      node.textContent = copyText(node.dataset.spTemplate, { count: node.dataset.spCount || 0 });
+    });
+  };
   const showToast = (text) => {
     const node = $('toast');
     if (!node) return;
@@ -28,8 +60,9 @@
     let data = {};
     try { data = await response.json(); } catch { /* Empty or non-JSON response. */ }
     if (!response.ok) {
-      const error = new Error(data.message || (response.status === 429 ? 'Please wait a little before trying again.' : `Request failed (${response.status}).`));
+      const error = new Error(data.message || (response.status === 429 ? t('rate_limit') : copyText('request_failed_status', { status: response.status })));
       error.status = response.status;
+      error.data = data;
       throw error;
     }
     return data;
@@ -77,6 +110,7 @@
   };
 
   let turnstileKey = null;
+  let turnstileVerified = false;
   let turnstileWidget = null;
   let turnstileToken = null;
   let turnstileWaiters = [];
@@ -85,11 +119,12 @@
   const ensureConfig = () => {
     if (!configPromise) configPromise = getJSON('/api/spotlight/config').then((config) => {
       turnstileKey = config.turnstileSiteKey || null;
+      turnstileVerified = Boolean(config.turnstileVerified);
       if (turnstileKey) loadTurnstile();
       return config;
     }).catch(() => {
       configPromise = null;
-      throw new Error('Could not load security settings. Please try again.');
+      throw new Error(t('security_settings_error'));
     });
     return configPromise;
   };
@@ -109,14 +144,16 @@
   };
   const installTurnstile = async (container) => {
     await ensureConfig();
-    if (!turnstileKey || !container || turnstileWidget !== null) return;
+    if (!turnstileKey || turnstileVerified || !container || turnstileWidget !== null) return;
     const loaded = await loadTurnstile();
     if (!loaded || !window.turnstile) return;
     container.hidden = false;
-    container.setAttribute('aria-label', 'Security check');
+    container.setAttribute('aria-label', t('security_aria'));
     turnstileWidget = window.turnstile.render(container, {
       sitekey: turnstileKey,
       theme: 'light',
+      execution: 'execute',
+      appearance: 'interaction-only',
       callback: (token) => {
         turnstileToken = token;
         turnstileWaiters.splice(0).forEach((resolve) => resolve(token));
@@ -130,9 +167,11 @@
   };
   const acquireTurnstile = async () => {
     await ensureConfig();
+    if (turnstileVerified) return undefined;
     if (!turnstileKey) return undefined;
+    if (turnstileWidget === null) await installTurnstile($('turnstileNote'));
     if (!(await loadTurnstile()) || turnstileWidget === null) {
-      throw new Error('Security check could not load. Please refresh and try again.');
+      throw new Error(t('security_load_error'));
     }
     if (turnstileToken) {
       const token = turnstileToken;
@@ -140,7 +179,7 @@
       return token;
     }
     $('turnstileNote')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    showToast('Complete the security check to continue.');
+    showToast(t('security_complete'));
     const token = await new Promise((resolve) => {
       turnstileWaiters.push(resolve);
       if (turnstileWidget !== null && window.turnstile) {
@@ -151,7 +190,7 @@
         if (index !== -1) { turnstileWaiters.splice(index, 1); resolve(null); }
       }, 120000);
     });
-    if (!token) throw new Error('Complete the security check and try again.');
+    if (!token) throw new Error(t('security_try_again'));
     turnstileToken = null;
     return token;
   };
@@ -160,6 +199,25 @@
     if (turnstileWidget !== null && window.turnstile) {
       try { window.turnstile.reset(turnstileWidget); } catch { /* Widget may have been removed. */ }
     }
+  };
+  const getDeviceHash = async () => {
+    if (!window.crypto?.subtle || !window.TextEncoder) throw new Error(t('device_hash_error'));
+    const fingerprint = [
+      navigator.userAgent || '',
+      screen.width,
+      screen.height,
+      window.devicePixelRatio || 1,
+      Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      navigator.language || '',
+      navigator.platform || '',
+      navigator.hardwareConcurrency || 0,
+    ];
+    const bytes = new TextEncoder().encode(JSON.stringify(fingerprint));
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  };
+  const markLocallyVerified = () => {
+    if (turnstileKey) turnstileVerified = true;
   };
 
   async function startDirectory() {
@@ -176,7 +234,7 @@
       const group = make('div', 'sp-filter-group');
       group.append(make('span', 'sp-filter-label', label));
       const chips = make('div', 'sp-chips');
-      const options = [{ value: '', label: 'All' }, ...items];
+      const options = [{ value: '', label: t('filter_all') }, ...items];
       options.forEach((item) => {
         const button = make('button', 'sp-chip', item.label);
         button.type = 'button';
@@ -189,18 +247,18 @@
     };
     const renderFilters = () => {
       filtersBox.replaceChildren();
-      filtersBox.append(renderChipGroup('Year', state.years.map((year) => ({ value: year, label: year })), state.year, (year) => {
+      filtersBox.append(renderChipGroup(t('filter_year'), state.years.map((year) => ({ value: year, label: year })), state.year, (year) => {
         state.year = year; state.course = ''; state.section = ''; state.page = 1; renderFilters(); loadStudents();
       }));
       if (state.year) {
         const courses = state.courses.filter((item) => item.year === state.year);
-        filtersBox.append(renderChipGroup('Course', courses.map((item) => ({ value: item.course, label: item.course })), state.course, (course) => {
+        filtersBox.append(renderChipGroup(t('filter_course'), courses.map((item) => ({ value: item.course, label: item.course })), state.course, (course) => {
           state.course = course; state.section = ''; state.page = 1; renderFilters(); loadStudents();
         }));
       }
       if (state.year && state.course) {
         const sections = state.sections.filter((item) => item.year === state.year && item.course === state.course).map((item) => item.section);
-        if (sections.length) filtersBox.append(renderChipGroup('Section', [...new Set(sections)].map((section) => ({ value: section, label: section })), state.section, (section) => {
+        if (sections.length) filtersBox.append(renderChipGroup(t('filter_section'), [...new Set(sections)].map((section) => ({ value: section, label: section })), state.section, (section) => {
           state.section = section; state.page = 1; renderFilters(); loadStudents();
         }));
       }
@@ -210,10 +268,10 @@
       link.href = profileLink(student.roll_number);
       link.append(makeAvatar(student));
       const copy = make('span', 'sp-student-copy');
-      copy.append(make('span', 'sp-student-name', student.name || 'Student'));
+       copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
       copy.append(make('span', 'sp-student-meta', `${campusLine(student)} · ${student.roll_number || ''}`));
       const counts = make('span', 'sp-card-counts');
-      counts.append(make('span', '', `Likes ${Number(student.like_count) || 0}`), make('span', '', `Notes ${Number(student.note_count) || 0}`));
+       counts.append(make('span', '', `${t('likes_label')} ${Number(student.like_count) || 0}`), make('span', '', `${t('notes_label')} ${Number(student.note_count) || 0}`));
       copy.append(counts);
       link.append(copy);
       return link;
@@ -232,7 +290,7 @@
       } else {
         grid.querySelector('[data-list-error]')?.remove();
         more.disabled = true;
-        more.textContent = 'Loading students…';
+        more.textContent = t('loading_students');
       }
       const params = new URLSearchParams({ page: String(state.page) });
       if (state.year) params.set('year', state.year);
@@ -248,13 +306,13 @@
         state.hasMore = Boolean(data.hasMore);
         more.hidden = !state.hasMore;
         more.disabled = false;
-        more.textContent = 'Load more students';
+        more.textContent = t('load_more_students');
         $('directoryCaption').textContent = students.length
-          ? (state.query ? `Showing matches for “${state.query}”.` : `${students.length} students in this view. Find a classmate and say something kind.`)
-          : 'Try another name or filter to find your classmate.';
+          ? (state.query ? copyText('directory_matches', { query: state.query }) : copyText('directory_count', { count: students.length }))
+          : t('directory_no_match_hint');
         if (!students.length && !append) {
           const empty = make('div', 'sp-state');
-          empty.append(make('strong', '', state.query ? 'No matches this time' : 'No students in this view'), make('span', '', 'Change a filter or search for a different name.'));
+          empty.append(make('strong', '', state.query ? t('directory_matches_empty_title') : t('directory_empty_title')), make('span', '', t('directory_empty_hint')));
           grid.append(empty);
         }
       } catch (error) {
@@ -262,15 +320,15 @@
         if (!append) {
           grid.replaceChildren();
           const failed = make('div', 'sp-state');
-          failed.append(make('strong', '', 'Could not load the directory'), make('span', '', error.message || 'Please try again.'));
-          const retry = make('button', 'sp-btn sp-btn-secondary', 'Try again');
+          failed.append(make('strong', '', t('directory_load_error')), make('span', '', error.message || t('try_again')));
+          const retry = make('button', 'sp-btn sp-btn-secondary', t('try_again'));
           retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', () => loadStudents(false));
           failed.append(retry); grid.append(failed);
         } else {
           const failed = make('div', 'sp-state');
           failed.dataset.listError = 'true';
-          failed.append(make('strong', '', 'More students could not load'), make('span', '', error.message || 'Try again when the connection is ready.'));
-          const retry = make('button', 'sp-btn sp-btn-secondary', 'Retry');
+          failed.append(make('strong', '', t('directory_retry_error')), make('span', '', error.message || t('directory_retry_hint')));
+          const retry = make('button', 'sp-btn sp-btn-secondary', t('retry'));
           retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', () => loadStudents(true));
           failed.append(retry); grid.append(failed);
         }
@@ -285,10 +343,10 @@
     const renderLeaderState = (text, error = false) => {
       leaderBox.replaceChildren();
       const message = make('div', 'sp-state');
-      message.append(make('strong', '', error ? 'Could not load appreciation' : text));
+      message.append(make('strong', '', error ? t('leader_load_error') : text));
       if (error) {
         message.append(make('span', '', text));
-        const retry = make('button', 'sp-btn sp-btn-secondary', 'Try again');
+        const retry = make('button', 'sp-btn sp-btn-secondary', t('try_again'));
         retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', loadLeaderboard); message.append(retry);
       }
       leaderBox.append(message);
@@ -299,24 +357,24 @@
       try {
         const data = await getJSON(`/api/spotlight/leaderboard?tab=${encodeURIComponent(state.leader)}`);
         if (requestId !== leaderRequestId) return;
-        const students = (Array.isArray(data.students) ? data.students : []).slice(0, 20);
+        const students = (Array.isArray(data.students) ? data.students : []).slice(0, Number(spotlightSettings.leaderboard_size));
         leaderBox.replaceChildren();
-        if (!students.length) { renderLeaderState('No appreciation to show just yet.'); return; }
+        if (!students.length) { renderLeaderState(t('leader_empty')); return; }
         students.forEach((student) => {
           const link = make('a', 'sp-leader');
           link.href = profileLink(student.roll_number);
           link.append(makeAvatar(student));
           const copy = make('span', 'sp-leader-copy');
-          copy.append(make('span', 'sp-student-name', student.name || 'Student'));
+          copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
           copy.append(make('span', 'sp-student-meta', campusLine(student)));
           link.append(copy);
           const value = Number(state.leader === 'trending' ? student.score : (state.leader === 'liked' ? student.like_count : student.note_count)) || 0;
           const count = make('span', 'sp-leader-count', String(value));
-          count.append(make('small', '', state.leader === 'trending' ? 'appreciation' : state.leader === 'liked' ? 'likes' : 'notes'));
+          count.append(make('small', '', state.leader === 'trending' ? t('leader_unit_trending') : state.leader === 'liked' ? t('leader_unit_liked') : t('leader_unit_noted')));
           link.append(count);
           leaderBox.append(link);
         });
-      } catch (error) { if (requestId === leaderRequestId) renderLeaderState(error.message || 'Please try again.', true); }
+      } catch (error) { if (requestId === leaderRequestId) renderLeaderState(error.message || t('please_try_again'), true); }
     }
     try {
       const filters = await getJSON('/api/spotlight/filters');
@@ -327,7 +385,7 @@
     } catch (error) {
       filtersBox.replaceChildren();
       const warning = make('div', 'sp-state');
-      warning.append(make('strong', '', 'Filters are unavailable'), make('span', '', error.message || 'You can still search the directory.'));
+      warning.append(make('strong', '', t('filters_unavailable')), make('span', '', error.message || t('filters_fallback')));
       filtersBox.append(warning);
     }
     await loadStudents();
@@ -346,9 +404,9 @@
       button.disabled = true;
       try {
         const data = await getJSON('/api/spotlight/random');
-        if (!data.roll_number) throw new Error('No profile is available yet.');
+        if (!data.roll_number) throw new Error(t('random_missing'));
         window.location.assign(profileLink(data.roll_number));
-      } catch (error) { showToast(error.message || 'Could not find a profile.'); }
+      } catch (error) { showToast(error.message || t('random_error')); }
       finally { button.disabled = false; }
     });
     document.querySelectorAll('[data-leader-tab]').forEach((button) => button.addEventListener('click', () => {
@@ -371,15 +429,15 @@
       view.replaceChildren();
       const state = make('div', 'sp-state');
       state.append(make('strong', '', title), make('span', '', text));
-      const back = make('a', 'sp-btn sp-btn-secondary', 'Back to discovery');
+       const back = make('a', 'sp-btn sp-btn-secondary', t('back_to_discovery'));
       back.href = '/spotlight'; back.style.marginTop = '14px'; state.append(back); view.append(state);
     };
-    const reactionButton = (note, type, label, count) => {
+    const reactionButton = (note, type, label, emoji, count) => {
       const button = make('button', `sp-action${note.myReaction === type ? ' is-selected' : ''}`);
       button.type = 'button';
       button.dataset.reaction = type;
-      button.setAttribute('aria-label', `${label}, ${Number(count) || 0}`);
-      button.append(svgIcon(type), make('span', '', String(Number(count) || 0)));
+      button.setAttribute('aria-label', copyText('reaction_aria', { label, count: Number(count) || 0 }));
+      button.append(make('span', '', emoji), make('span', '', String(Number(count) || 0)));
       return button;
     };
     const renderNotes = (notes) => {
@@ -391,7 +449,7 @@
       });
       if (!ordered.length) {
         const empty = make('div', 'sp-state');
-        empty.append(make('strong', '', 'The wall is waiting for its first note'), make('span', '', 'Leave the first kind message for this student.'));
+         empty.append(make('strong', '', t('notes_empty_title')), make('span', '', t('notes_empty_hint')));
         notesList.append(empty); return;
       }
       ordered.forEach((note) => {
@@ -401,14 +459,14 @@
         const footer = make('div', 'sp-note-footer');
         const reactions = make('div', 'sp-reactions');
         reactions.append(
-          reactionButton(note, 'heart', 'Heart', note.react_heart),
-          reactionButton(note, 'laugh', 'Laugh', note.react_laugh),
-          reactionButton(note, 'fire', 'Fire', note.react_fire),
+           reactionButton(note, 'heart', t('reaction_heart_label'), t('reaction_heart'), note.react_heart),
+           reactionButton(note, 'laugh', t('reaction_laugh_label'), t('reaction_laugh'), note.react_laugh),
+           reactionButton(note, 'fire', t('reaction_fire_label'), t('reaction_fire'), note.react_fire),
         );
         const tools = make('div', '');
         const time = make('div', 'sp-time', formatDate(note.approved_at || note.created_at));
         const report = make('button', 'sp-action sp-report');
-        report.type = 'button'; report.dataset.report = 'true'; report.append(svgIcon('report'), make('span', '', 'Report'));
+         report.type = 'button'; report.dataset.report = 'true'; report.setAttribute('aria-label', t('report_aria')); report.append(svgIcon('report'), make('span', '', t('report_label')));
         tools.append(time, report);
         footer.append(reactions, tools);
         card.append(footer);
@@ -417,17 +475,21 @@
     };
     try {
       await ensureConfig();
-      const data = await getJSON(`/api/spotlight/students/${encodeURIComponent(roll)}`, { cache: 'no-store' });
+      let deviceHash = null;
+      try { deviceHash = await getDeviceHash(); } catch { /* Keep profile available; liking will report an explicit device-check error when required. */ }
+      const profileUrl = new URL(`/api/spotlight/students/${encodeURIComponent(roll)}`, window.location.origin);
+      if (deviceHash) profileUrl.searchParams.set('device_hash', deviceHash);
+      const data = await getJSON(profileUrl.pathname + profileUrl.search, { cache: 'no-store' });
       studentData = data.student;
-      if (!studentData) throw new Error('This profile is not available.');
-      document.title = `${studentData.name || 'Student'} · TKR Spotlight`;
+      if (!studentData) throw new Error(t('profile_missing'));
+      document.title = `${studentData.name || t('student_fallback')} · ${t('brand_name')}`;
       view.replaceChildren();
       const card = make('section', 'sp-profile-card');
       const main = make('div', 'sp-profile-main');
       const person = make('div', 'sp-profile-person');
       person.append(makeAvatar(studentData, true));
       const info = make('div', 'sp-profile-info');
-      info.append(make('h1', 'sp-profile-name', studentData.name || 'Student'));
+       info.append(make('h1', 'sp-profile-name', studentData.name || t('student_fallback')));
       info.append(make('div', 'sp-roll', studentData.roll_number || roll));
       info.append(make('div', 'sp-profile-meta', campusLine(studentData)));
       person.append(info);
@@ -436,22 +498,27 @@
       const like = make('button', `sp-btn sp-btn-like${data.likedByMe ? ' is-liked' : ''}`);
       like.type = 'button';
       like.dataset.likeButton = 'true';
-      like.setAttribute('aria-pressed', String(Boolean(data.likedByMe)));
-      like.append(svgIcon('heart'));
-      const likeLabel = make('span', '', `${data.likedByMe ? 'Liked' : '+1 Like'} · ${Number(studentData.like_count) || 0}`);
+       like.setAttribute('aria-pressed', String(Boolean(data.likedByMe)));
+       const likeLabel = make('span', '', copyText('like_count_format', { emoji: t('like_emoji'), label: data.likedByMe ? t('liked_label') : t('like_label'), count: Number(studentData.like_count) || 0 }));
+       like.setAttribute('aria-label', copyText('like_aria', { label: `${t('like_emoji')} ${data.likedByMe ? t('liked_label') : t('like_label')}`, count: Number(studentData.like_count) || 0 }));
       like.append(likeLabel);
       like.addEventListener('click', async () => {
         if (like.disabled) return;
         like.disabled = true;
         try {
-          const token = await acquireTurnstile();
-          const body = token ? { turnstileToken: token } : {};
+           if (!deviceHash && spotlightSettings.like_device_check !== false) throw new Error(t('device_hash_error'));
+           if (!deviceHash) deviceHash = await getDeviceHash().catch(() => null);
+           const token = await acquireTurnstile();
+           const body = { device_hash: deviceHash };
+           if (token) body.turnstileToken = token;
           const updated = await getJSON(`/api/spotlight/students/${encodeURIComponent(roll)}/like`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           data.likedByMe = Boolean(updated.liked);
           studentData.like_count = updated.like_count;
           like.classList.toggle('is-liked', data.likedByMe);
           like.setAttribute('aria-pressed', String(data.likedByMe));
-          likeLabel.textContent = `${data.likedByMe ? 'Liked' : '+1 Like'} · ${Number(updated.like_count) || 0}`;
+           likeLabel.textContent = copyText('like_count_format', { emoji: t('like_emoji'), label: data.likedByMe ? t('liked_label') : t('like_label'), count: Number(updated.like_count) || 0 });
+            like.setAttribute('aria-label', copyText('like_aria', { label: `${t('like_emoji')} ${data.likedByMe ? t('liked_label') : t('like_label')}`, count: Number(updated.like_count) || 0 }));
+           markLocallyVerified();
           $('profileLikeCount').textContent = String(Number(updated.like_count) || 0);
           if (data.likedByMe) {
             const rect = like.getBoundingClientRect();
@@ -462,20 +529,30 @@
             document.body.append(burst);
             setTimeout(() => burst.remove(), 700);
           }
-        } catch (error) {
-          showToast(error.message || 'Like could not be saved.');
+         } catch (error) {
+           if (error.status === 409 && error.data?.liked) {
+             markLocallyVerified();
+             data.likedByMe = true;
+             studentData.like_count = Number(error.data.like_count ?? studentData.like_count) || 0;
+             like.classList.add('is-liked');
+             like.setAttribute('aria-pressed', 'true');
+             likeLabel.textContent = copyText('like_count_format', { emoji: t('like_emoji'), label: t('liked_label'), count: studentData.like_count });
+             like.setAttribute('aria-label', copyText('like_aria', { label: `${t('like_emoji')} ${t('liked_label')}`, count: studentData.like_count }));
+             $('profileLikeCount').textContent = String(studentData.like_count);
+           }
+           showToast(error.message || t('like_failed'));
         } finally { resetTurnstile(); like.disabled = false; }
       });
       const share = make('button', 'sp-btn sp-btn-secondary');
-      share.type = 'button'; share.append(svgIcon('share'), make('span', '', 'Share profile'));
+       share.type = 'button'; share.append(svgIcon('share'), make('span', '', t('share_button')));
       share.addEventListener('click', () => shareProfile(studentData));
       actions.append(like, share);
       main.append(actions);
       const stats = make('div', 'sp-profile-stats');
-      [['Likes', studentData.like_count], ['Notes', studentData.note_count]].forEach(([label, value]) => {
+        [[t('likes_label'), studentData.like_count], [t('notes_label'), studentData.note_count]].forEach(([label, value], index) => {
         const stat = make('div', 'sp-profile-stat');
         const count = make('b', '', String(Number(value) || 0));
-        if (label === 'Likes') count.id = 'profileLikeCount';
+         if (index === 0) count.id = 'profileLikeCount';
         stat.append(count, make('span', '', label));
         stats.append(stat);
       });
@@ -490,40 +567,41 @@
       const textInput = $('noteText');
       const counter = $('noteCounter');
       const submit = $('noteSubmit');
-      textInput.addEventListener('input', () => { counter.textContent = `${textInput.value.length} / 200`; });
+       textInput.addEventListener('input', () => { counter.textContent = copyText('note_counter', { count: textInput.value.length }); });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const text = textInput.value.trim();
         setMessage($('noteMessage'), '');
-        if (!text) { setMessage($('noteMessage'), 'Write a note before sending.', 'error'); return; }
-        submit.disabled = true; submit.textContent = 'Sending…';
+       if (!text) { setMessage($('noteMessage'), t('note_empty_error'), 'error'); return; }
+       submit.disabled = true; submit.textContent = t('note_sending');
         try {
           const token = await acquireTurnstile();
           const body = { text };
           if (token) body.turnstileToken = token;
           const response = await getJSON(`/api/spotlight/students/${encodeURIComponent(roll)}/notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-          setMessage($('noteMessage'), response.message || 'Your note will appear after review.', 'success');
-          textInput.value = ''; counter.textContent = '0 / 200';
-        } catch (error) { setMessage($('noteMessage'), error.message || 'Could not send your note.', 'error'); }
-        finally { resetTurnstile(); submit.disabled = false; submit.textContent = 'Send for review'; }
+         setMessage($('noteMessage'), response.message || t('note_review'), 'success');
+         markLocallyVerified();
+         textInput.value = ''; counter.textContent = copyText('note_counter', { count: 0 });
+       } catch (error) { setMessage($('noteMessage'), error.message || t('note_send_error'), 'error'); }
+       finally { resetTurnstile(); submit.disabled = false; submit.textContent = t('note_send'); }
       });
       notesList.addEventListener('click', async (event) => {
         const cardElement = event.target.closest('[data-note-id]');
         if (!cardElement) return;
         const noteId = cardElement.dataset.noteId;
         const reportButton = event.target.closest('[data-report]');
-        if (reportButton) {
-          if (!window.confirm('Report this note for review?')) return;
+         if (reportButton) {
+           if (!window.confirm(t('report_confirm'))) return;
           reportButton.disabled = true;
           try {
             const reportResult = await getJSON(`/api/spotlight/notes/${encodeURIComponent(noteId)}/report`, { method: 'POST' });
-            if (reportResult.success === false) throw new Error(reportResult.message || 'Could not report this note.');
+             if (reportResult.success === false) throw new Error(reportResult.message || t('report_failed'));
             cardElement.remove();
             const currentNotes = Array.isArray(data.notes) ? data.notes : [];
             data.notes = currentNotes.filter((note) => String(note.id) !== String(noteId));
             renderNotes(data.notes);
-            showToast('Note reported. Thank you.');
-          } catch (error) { showToast(error.message || 'Could not report this note.'); reportButton.disabled = false; }
+             showToast(t('note_reported_thanks'));
+           } catch (error) { showToast(error.message || t('report_failed')); reportButton.disabled = false; }
           return;
         }
         const reactionButtonElement = event.target.closest('[data-reaction]');
@@ -546,20 +624,21 @@
           }
           renderNotes(data.notes);
         } catch (error) {
-          showToast(error.message || 'Reaction could not be saved.');
+           showToast(error.message || t('reaction_failed'));
           cardElement.querySelectorAll('[data-reaction]').forEach(button => { button.disabled = false; });
         } finally { reacting.delete(noteId); }
       });
     } catch (error) {
-      profileFailure(error.status === 404 ? 'This profile is not available' : 'Could not open this profile', error.message || 'Try again in a moment.');
+      profileFailure(error.status === 404 ? t('profile_not_available') : t('profile_open_failed'), error.message || t('profile_try_again'));
     }
   }
 
   function shareProfile(student) {
     const link = window.location.href;
-    const message = `Check out ${student.name} on TKR Spotlight 💘 ${link}`;
+    const brand = t('share_brand') || t('brand_name');
+    const message = copyText('share_template', { name: student.name || t('student_fallback'), link, brand });
     if (navigator.share) {
-      navigator.share({ title: `${student.name} on TKR Spotlight`, text: message }).catch(() => {});
+      navigator.share({ title: copyText('share_title', { name: student.name || t('student_fallback'), brand }), text: message }).catch(() => {});
       return;
     }
     const host = $('shareDialogHost');
@@ -568,22 +647,22 @@
     overlay.addEventListener('click', (event) => { if (event.target === overlay) overlay.remove(); });
     const dialog = make('section', 'sp-dialog');
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'shareHeading');
-    dialog.append(make('h2', '', 'Share a good find'));
+    dialog.append(make('h2', '', t('share_dialog_title')));
     const heading = dialog.lastChild; heading.id = 'shareHeading';
-    dialog.append(make('p', '', 'Send this profile to someone who knows them.'));
+    dialog.append(make('p', '', t('share_dialog_hint')));
     const options = make('div', 'sp-share-options');
-    const whatsapp = make('a', 'sp-btn', 'WhatsApp');
+    const whatsapp = make('a', 'sp-btn', t('share_whatsapp'));
     whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
     whatsapp.target = '_blank'; whatsapp.rel = 'noopener noreferrer';
-    const copy = make('button', 'sp-btn sp-btn-secondary', 'Copy link');
+    const copy = make('button', 'sp-btn sp-btn-secondary', t('copy_link'));
     copy.type = 'button';
     copy.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(link); showToast('Profile link copied.'); overlay.remove(); }
-      catch { showToast('Could not copy the link on this device.'); }
+      try { await navigator.clipboard.writeText(link); showToast(t('link_copied')); overlay.remove(); }
+      catch { showToast(t('copy_failed')); }
     });
     options.append(whatsapp, copy);
     dialog.append(options);
-    const close = make('button', 'sp-quiet-link', 'Close');
+    const close = make('button', 'sp-quiet-link', t('share_close'));
     close.type = 'button'; close.style.marginTop = '10px'; close.addEventListener('click', () => overlay.remove());
     dialog.append(close); overlay.append(dialog); host.append(overlay);
     close.focus();
@@ -604,9 +683,24 @@
       setMessage($('adminLoginError'), message, 'error');
     };
     const handleAdminError = (error) => {
-      if (error.status === 401) { showLogin('Your admin session ended. Sign in again.'); return; }
-      setMessage($('adminError'), error.message || 'The request could not be completed.', 'error');
+      if (error.status === 401) { showLogin(t('admin_session_ended')); return; }
+      setMessage($('adminError'), error.message || t('request_failed'), 'error');
     };
+    const editor = window.createSpotlightEditor({
+      content,
+      t,
+      copyText,
+      make,
+      getJSON,
+      showToast,
+      setAdminError: (message, error) => error ? handleAdminError(error) : setMessage($('adminError'), message, 'error'),
+      refreshPublicCopy: async () => {
+        const refreshed = await getJSON('/api/spotlight/texts', { cache: 'no-store' });
+        spotlightTexts = refreshed.texts || {};
+        spotlightSettings = refreshed.settings || {};
+        applyStaticCopy();
+      },
+    });
     const loadQueue = async () => {
       content.replaceChildren(make('div', 'sp-skeleton'), make('div', 'sp-skeleton'), make('div', 'sp-skeleton'));
       try {
@@ -616,36 +710,38 @@
         renderAdminContent();
       } catch (error) { handleAdminError(error); }
     };
+    const loadSettings = () => editor.load();
     const renderAdminContent = () => {
       content.replaceChildren();
       setMessage($('adminError'), '');
+      if (state.tab === 'settings') { editor.render(); return; }
       if (state.tab === 'students') {
         const inputWrap = make('div', 'sp-admin-search');
         const search = document.createElement('input');
         search.type = 'search'; search.className = 'sp-input'; search.style.paddingLeft = '14px';
-        search.placeholder = 'Search all students by name or roll number';
+         search.placeholder = t('campus_search');
         search.value = state.search;
-        search.setAttribute('aria-label', 'Search students by name or roll number');
+         search.setAttribute('aria-label', t('campus_search_aria'));
         inputWrap.append(search);
         content.append(inputWrap);
-        const hint = make('p', 'sp-section-caption', 'Search returns up to 50 matching students. Hidden profiles remain out of public view.');
+       const hint = make('p', 'sp-section-caption', t('campus_search_hint'));
         content.append(hint);
         if (!state.search) {
           const info = make('div', 'sp-state');
-          info.append(make('strong', '', 'Find a student to manage visibility'), make('span', '', 'Start typing a name or roll number.'));
+         info.append(make('strong', '', t('student_manage_empty_title')), make('span', '', t('student_manage_empty_hint')));
           content.append(info);
         } else if (!state.students.length) {
           const empty = make('div', 'sp-state');
-          empty.append(make('strong', '', 'No matching students'), make('span', '', 'Try a shorter name or another roll number.'));
+         empty.append(make('strong', '', t('student_no_match')), make('span', '', t('student_try_another')));
           content.append(empty);
         } else {
           state.students.forEach((student) => {
             const row = make('div', 'sp-hidden-row');
             const copy = make('div', 'sp-student-copy');
-            copy.append(make('div', 'sp-student-name', student.name || 'Student'));
+           copy.append(make('div', 'sp-student-name', student.name || t('student_fallback')));
             copy.append(make('div', 'sp-student-meta', `${student.roll_number || ''} · ${campusLine(student)}`));
-            if (student.hidden) copy.append(make('span', 'sp-badge', 'Hidden'));
-            const button = make('button', `sp-btn ${student.hidden ? 'sp-btn-secondary' : 'sp-btn-danger'}`, student.hidden ? 'Unhide' : 'Hide');
+           if (student.hidden) copy.append(make('span', 'sp-badge', t('hidden_label')));
+           const button = make('button', `sp-btn ${student.hidden ? 'sp-btn-secondary' : 'sp-btn-danger'}`, student.hidden ? t('unhide_label') : t('hide_label'));
             button.type = 'button'; button.dataset.visibilityAction = student.hidden ? 'unhide' : 'hide'; button.dataset.roll = student.roll_number;
             row.append(copy, button); content.append(row);
           });
@@ -660,17 +756,17 @@
       const notes = state.queue[state.tab] || [];
       if (!notes.length) {
         const empty = make('div', 'sp-state');
-        empty.append(make('strong', '', state.tab === 'pending' ? 'Nothing waiting for review' : 'No reported notes'), make('span', '', state.tab === 'pending' ? 'New notes will appear here when students send them.' : 'Reported notes will appear here for a second look.'));
+         empty.append(make('strong', '', state.tab === 'pending' ? t('empty_pending_title') : t('empty_reported_title')), make('span', '', state.tab === 'pending' ? t('empty_pending_hint') : t('empty_reported_hint')));
         content.append(empty); return;
       }
       notes.forEach((note) => {
         const article = make('article', 'sp-admin-note');
         const meta = make('div', 'sp-admin-meta');
         const nameLine = make('div');
-        const name = make('b', '', note.name || 'Student');
+         const name = make('b', '', note.name || t('student_fallback'));
         nameLine.append(name, document.createTextNode(` · ${note.roll_number || ''}`));
         meta.append(nameLine, make('div', '', `${campusLine(note)} · ${formatDate(note.created_at)}`));
-        if (note.status) meta.append(make('div', '', `Status: ${note.status}${note.reported ? ' · Reported' : ''}`));
+         if (note.status) meta.append(make('div', '', `${copyText('status_label', { status: note.status })}${note.reported ? t('note_reported_suffix') : ''}`));
         article.append(meta, make('div', 'sp-admin-text', note.text || ''));
         const actions = make('div', 'sp-admin-actions');
         const addAction = (label, action, style, confirmMessage) => {
@@ -681,19 +777,19 @@
             button.disabled = true;
             try {
               const result = await getJSON(`/api/spotlight/admin/notes/${encodeURIComponent(note.id)}/${action}`, { method: 'POST' });
-              if (result.success === false) throw new Error(result.message || 'That action could not be completed.');
+             if (result.success === false) throw new Error(result.message || t('admin_action_error'));
               await loadQueue();
-              showToast(action === 'approve' ? 'Note approved.' : action === 'keep' ? 'Note restored.' : 'Note removed.');
+             showToast(action === 'approve' ? t('note_approved') : action === 'keep' ? t('note_restored') : t('note_removed'));
             } catch (error) { button.disabled = false; handleAdminError(error); }
           });
           actions.append(button);
         };
         if (state.tab === 'pending') {
-          addAction('Approve', 'approve', 'sp-btn-approve');
-          addAction('Reject', 'reject', 'sp-btn-danger', 'Reject this note? It will be permanently removed.');
+           addAction(t('approve_label'), 'approve', 'sp-btn-approve');
+           addAction(t('reject_label'), 'reject', 'sp-btn-danger', t('reject_confirm'));
         } else {
-          addAction('Keep note', 'keep', 'sp-btn-keep');
-          addAction('Delete', 'delete', 'sp-btn-danger', 'Delete this reported note permanently?');
+           addAction(t('keep_note_label'), 'keep', 'sp-btn-keep');
+           addAction(t('delete_label'), 'delete', 'sp-btn-danger', t('delete_confirm'));
         }
         article.append(actions); content.append(article);
       });
@@ -720,30 +816,36 @@
       const button = $('adminLoginButton');
       const password = $('adminPassword').value;
       setMessage($('adminLoginError'), '');
-      if (!password) { setMessage($('adminLoginError'), 'Enter the admin password.', 'error'); return; }
-      button.disabled = true; button.textContent = 'Signing in…';
+      if (!password) { setMessage($('adminLoginError'), t('login_enter_password'), 'error'); return; }
+      button.disabled = true; button.textContent = t('login_signing_in');
       try {
         const result = await getJSON('/api/spotlight/admin/login', { method: 'POST', headers: { 'x-admin-password': password } });
-        if (result.success !== true) throw new Error(result.message || 'Could not sign in.');
+        if (result.success !== true) throw new Error(result.message || t('login_failed'));
         loginView.hidden = true;
         adminView.hidden = false;
         $('adminPassword').value = '';
         await loadQueue();
-      } catch (error) { setMessage($('adminLoginError'), error.message || 'Could not sign in.', 'error'); }
-      finally { button.disabled = false; button.textContent = 'Open review desk'; $('adminPassword').value = ''; }
+      } catch (error) { setMessage($('adminLoginError'), error.message || t('login_failed'), 'error'); }
+      finally { button.disabled = false; button.textContent = t('login_button'); $('adminPassword').value = ''; }
     });
     $('adminLogout').addEventListener('click', async () => {
       try { await getJSON('/api/spotlight/admin/logout', { method: 'POST' }); }
       catch (error) { if (error.status !== 401) setMessage($('adminError'), error.message, 'error'); }
       state.queue = { pending: [], reported: [] }; state.students = [];
-      showLogin('You have signed out.');
+      showLogin(t('signed_out'));
     });
     $('adminTabs').addEventListener('click', (event) => {
       const tab = event.target.closest('[data-admin-tab]');
       if (!tab) return;
+      if (editor.isSaving()) return;
+      if (state.tab === 'settings' && editor.hasDirty()) {
+        if (!window.confirm(t('settings_dirty_confirm'))) return;
+        editor.discard();
+      }
       state.tab = tab.dataset.adminTab;
       $('adminTabs').querySelectorAll('[data-admin-tab]').forEach((button) => button.setAttribute('aria-selected', String(button === tab)));
       if (state.tab === 'students') renderAdminContent();
+      else if (state.tab === 'settings') loadSettings();
       else loadQueue();
     });
     content.addEventListener('click', async (event) => {
@@ -754,9 +856,9 @@
       const roll = button.dataset.roll;
       try {
         const result = await getJSON(`/api/spotlight/admin/students/${encodeURIComponent(roll)}/${action}`, { method: 'POST' });
-        if (result.success === false) throw new Error(result.message || 'Profile visibility could not be changed.');
+        if (result.success === false) throw new Error(result.message || t('profile_visibility_error'));
         await loadStudents();
-        showToast(action === 'hide' ? 'Profile hidden from public view.' : 'Profile is visible again.');
+        showToast(action === 'hide' ? t('profile_hidden') : t('profile_visible'));
       } catch (error) { button.disabled = false; handleAdminError(error); }
     });
     // The signed session cookie is the only credential retained after login.
@@ -768,12 +870,42 @@
       adminView.hidden = false;
       renderAdminContent();
     }).catch((error) => {
-      if (error.status !== 401) setMessage($('adminLoginError'), error.message || 'Could not check the admin session.', 'error');
+      if (error.status !== 401) setMessage($('adminLoginError'), error.message || t('admin_login_session_error'), 'error');
     });
   }
 
-  const page = document.body.dataset.spotlightPage;
-  if (page === 'directory') startDirectory();
-  if (page === 'profile') startProfile();
-  if (page === 'admin') startAdmin();
+  const failedPageVisibility = new Map();
+  const startAfterTexts = async () => {
+    const errorView = $('spotlightTextsError');
+    const app = $('app');
+    try {
+      const response = await getJSON('/api/spotlight/texts', { cache: 'no-store' });
+      spotlightTexts = response.texts || {};
+      spotlightSettings = response.settings || {};
+      applyStaticCopy();
+      if (errorView) errorView.hidden = true;
+      if (app && failedPageVisibility.size) {
+        failedPageVisibility.forEach((wasHidden, node) => { node.hidden = wasHidden; });
+        failedPageVisibility.clear();
+      }
+      const page = document.body.dataset.spotlightPage;
+      if (page === 'directory') startDirectory();
+      if (page === 'profile') startProfile();
+      if (page === 'admin') startAdmin();
+    } catch (error) {
+      if (app) Array.from(app.children).forEach((node) => {
+        if (!failedPageVisibility.has(node)) failedPageVisibility.set(node, node.hidden);
+        node.hidden = node !== errorView;
+      });
+      if (errorView) {
+        errorView.hidden = false;
+      }
+      const retry = $('spotlightTextsRetry');
+      if (retry) retry.addEventListener('click', () => {
+        retry.disabled = true;
+        startAfterTexts().finally(() => { retry.disabled = false; });
+      }, { once: true });
+    }
+  };
+  startAfterTexts();
 })();
