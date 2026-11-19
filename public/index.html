@@ -49,6 +49,49 @@
     text-align:center;text-decoration:none;letter-spacing:.01em;
     box-shadow:0 4px 14px rgba(239,68,68,.35);transition:.15s}
   .confessions-btn:hover{opacity:.9;transform:translateY(-1px)}
+  .spotlight-cta{
+    position:relative;isolation:isolate;display:flex;align-items:center;gap:14px;min-height:78px;
+    overflow:hidden;padding:13px 17px;border:1px solid rgba(255,255,255,.58);border-radius:16px;
+    background:linear-gradient(112deg,#3d245f 0%,#713586 47%,#c43d78 100%);
+    color:#fff;text-align:left;letter-spacing:0;
+    box-shadow:0 8px 20px rgba(115,48,119,.23),inset 0 1px 0 rgba(255,255,255,.22);
+    transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;
+  }
+  .spotlight-cta::before{
+    position:absolute;z-index:-1;inset:0;
+    background:radial-gradient(ellipse at 88% 0%,rgba(255,192,219,.25),transparent 46%);
+    content:"";pointer-events:none;
+  }
+  .spotlight-cta:hover{
+    opacity:1;transform:translateY(-2px);
+    box-shadow:0 12px 25px rgba(115,48,119,.3),inset 0 1px 0 rgba(255,255,255,.25);
+    filter:saturate(1.08);
+  }
+  .spotlight-cta:focus-visible{outline:3px solid #71389b;outline-offset:4px}
+  .spotlight-cta:active{transform:translateY(0) scale(.99);box-shadow:0 4px 11px rgba(115,48,119,.22)}
+  .spotlight-cta .spotlight-mark{
+    display:grid;width:46px;height:46px;flex:none;place-items:center;border:1px solid rgba(255,255,255,.35);
+    border-radius:14px;background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.2);
+  }
+  .spotlight-cta .spotlight-mark svg{display:block;width:25px;height:25px}
+  .spotlight-cta .spotlight-copy{display:grid;min-width:0;gap:2px}
+  .spotlight-cta .spotlight-title{font-size:16px;font-weight:800;line-height:1.2;letter-spacing:-.02em}
+  .spotlight-cta .spotlight-subtitle{color:rgba(255,255,255,.85);font-size:12px;font-weight:500;line-height:1.35}
+  .spotlight-cta .spotlight-arrow{
+    width:19px;height:19px;flex:none;margin-left:auto;color:#ffe0ed;
+    transition:transform .18s ease;
+  }
+  .spotlight-cta:hover .spotlight-arrow{transform:translateX(3px)}
+  @media(max-width:360px){
+    .spotlight-cta{gap:11px;padding:12px}
+    .spotlight-cta .spotlight-mark{width:42px;height:42px}
+    .spotlight-cta .spotlight-title{font-size:15px}
+    .spotlight-cta .spotlight-subtitle{font-size:11px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .spotlight-cta,.spotlight-cta .spotlight-arrow{transition:none}
+    #loginBox{opacity:1;transform:none}
+  }
   .login .pad{padding:32px 28px}
   .login h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
   .login .hint{color:var(--sub);font-size:13px;margin:4px 0 22px}
@@ -175,7 +218,21 @@
     </div>
     <div class="err" id="err"></div>
     <a href="/chat" class="confessions-btn" style="margin-top:12px">🌙 Reyi</a>
-    <a href="/spotlight" class="confessions-btn" style="margin-top:12px;display:none">TKR Spotlight</a>
+    <a href="/spotlight" class="confessions-btn spotlight-cta" style="margin-top:12px">
+      <span class="spotlight-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2.8 14.6 9.4 21.2 12l-6.6 2.6L12 21.2l-2.6-6.6L2.8 12l6.6-2.6L12 2.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="m18.2 3.4.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8.8-2.1Z" fill="#FFD8A8"/>
+        </svg>
+      </span>
+      <span class="spotlight-copy">
+        <span class="spotlight-title">TKR Spotlight</span>
+        <span class="spotlight-subtitle">Give a classmate their moment</span>
+      </span>
+      <svg class="spotlight-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4.5 12h14m-5.5-5.5L18.5 12 13 17.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
   </div></div>
 
   <div id="result" style="display:none">
