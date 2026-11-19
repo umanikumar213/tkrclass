@@ -19,7 +19,7 @@ Node.js 20 / Express application for TKR attendance checking, the confession boa
 
 API routes are mounted under `/api/chat/*` and `/api/reyi/*`. Ordinary posts/comments require approval. Admin-authored pinned posts belong only to `/chat`, not the homepage or `/reyi`.
 
-Spotlight is independent and available all day at `/api/spotlight/*`; it does not use the Reyi night window. Its attendance-homepage link is visible as a highlighted TKR Spotlight button below Reyi.
+Spotlight is independent and available all day at `/api/spotlight/*`; it does not use the Reyi night window. Its attendance-homepage link is visible as a highlighted TKR Spotlight button above Reyi.
 
 Spotlight's students use it only on phones. Prioritize 360–430px layouts and touch interaction; desktop support is secondary. Spotlight is intentionally light-only, retaining its pink–purple–blue accent; do not reintroduce a theme toggle or saved theme preference. Keep visual redesigns separate from the backend APIs, stored records, authentication and abuse-prevention rules.
 
