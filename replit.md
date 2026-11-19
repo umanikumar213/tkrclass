@@ -127,6 +127,8 @@ npm start
 
 The Replit workflow runs `PORT=5000 node server.js`; Railway uses `railway.toml` with the same Node entry point. Existing PostgreSQL records survive application redeploys.
 
+Spotlight HTML is sent with `Cache-Control: no-store` and `CDN-Cache-Control: no-store`. Its CSS and scripts use content-fingerprinted `/spotlight-assets/<release>/<file>` paths, generated together at startup. Keep this automatic versioning when updating the design: the production Cloudflare/browser cache can retain ordinary static URLs for four hours, mixing older styles/scripts with new HTML. Fingerprinted assets may be cached immutably because any asset change generates a different release path. Restart the application after changing Spotlight templates or assets.
+
 ```sh
 npm test
 node scripts/test-security.js

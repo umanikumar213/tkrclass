@@ -1,6 +1,5 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
+const { renderSpotlightPage, serveSpotlightAsset } = require('./lib/spotlight-assets');
 const pool = require('./db');
 const { initSpotlightSchema } = require('./lib/spotlight-db');
 const { hiddenRolls, initSpotlightMedia, getPhoto, getOg, sendImage } = require('./lib/spotlight-media');
@@ -17,6 +16,13 @@ const {
 const { spotlightAdmin } = require('./lib/spotlight-admin');
 
 const router = express.Router();
+router.get('/spotlight-assets/:version/:file', serveSpotlightAsset);
+router.use('/spotlight', (req, res, next) => {
+  // HTML must be refreshed so it can select this release's fingerprinted assets.
+  res.set('Cache-Control', 'no-store');
+  res.set('CDN-Cache-Control', 'no-store');
+  next();
+});
 router.use(['/spotlight', '/api/spotlight'], contentMiddleware);
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(error => {
   if (error.status) return res.status(error.status).json({ message: message(req, error.message) });
@@ -42,8 +48,8 @@ function publicOrigin(req) {
   } catch { /* Explicit deployment URL is optional. */ }
   return `${req.protocol}://${req.get('host')}`;
 }
-router.get('/spotlight', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight.html')));
-router.get('/spotlight/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight-admin.html')));
+router.get('/spotlight', (req, res) => res.type('html').send(renderSpotlightPage('spotlight.html')));
+router.get('/spotlight/admin', (req, res) => res.type('html').send(renderSpotlightPage('spotlight-admin.html')));
 router.get('/spotlight/:roll', validateRoll, wrap(async (req, res) => {
   if (req.params.roll !== req.roll) return res.redirect(301, `/spotlight/${req.roll}`);
   const profile = hiddenRolls.has(req.roll) ? null : await publicProfile(req.roll);
@@ -59,7 +65,7 @@ router.get('/spotlight/:roll', validateRoll, wrap(async (req, res) => {
     'og:image:width': '400', 'og:image:height': '400',
   };
   const meta = Object.entries(tags).map(([key, value]) => `<meta property="${key}" content="${escapeHtml(value)}">`).join('\n');
-  const template = fs.readFileSync(path.join(__dirname, 'public/spotlight-profile.html'), 'utf8');
+  const template = renderSpotlightPage('spotlight-profile.html');
   res.set('Cache-Control', 'no-store').status(profile ? 200 : 404).type('html').send(template.replace('<!--SPOTLIGHT_META-->', meta));
 }));
 
