@@ -38,13 +38,20 @@
         <label for="noteText" class="sp-kicker" style="display:block;margin-bottom:6px" data-sp-text="note_message_label">Your message</label>
         <textarea id="noteText" class="sp-textarea" maxlength="200" placeholder="A kind word can change someone's day." data-sp-placeholder="note_placeholder" required></textarea>
          <div class="sp-compose-bottom"><span id="noteCounter" class="sp-counter" data-sp-template="note_counter" data-sp-count="0">0 / 200</span><button type="submit" id="noteSubmit" class="sp-btn" data-sp-text="note_send">Send for review</button></div>
-        <div id="turnstileNote" class="sp-turnstile"></div>
         <div id="noteMessage" class="sp-message" role="status"></div>
       </form>
        </div>
     </section>
     <footer class="sp-footer"><span data-sp-text="profile_remove_prefix">Want your profile removed?</span> <a id="removeProfile" aria-label="Want your profile removed? Contact admin" data-sp-aria="note_remove_profile" data-sp-href="profile_remove_url" href="#" data-sp-text="profile_remove_link">Contact admin</a></footer>
     <div id="shareDialogHost"></div>
+    <dialog id="spotlightSecurityDialog" class="sp-confirm-dialog" aria-labelledby="securityDialogTitle">
+      <div class="sp-confirm-content">
+        <h2 id="securityDialogTitle" data-sp-text="security_aria">Security check</h2>
+        <p data-sp-text="security_complete">Complete the security check to continue.</p>
+        <div id="turnstileNote" class="sp-turnstile"></div>
+        <button type="button" class="sp-btn sp-btn-secondary" data-security-cancel data-sp-text="confirm_cancel">Cancel</button>
+      </div>
+    </dialog>
     <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
      <dialog id="spotlightConfirmDialog" class="sp-confirm-dialog" aria-labelledby="confirmDialogTitle">
        <div class="sp-confirm-content"><h2 id="confirmDialogTitle" data-sp-text="confirm_title">One quick check</h2><p id="confirmDialogMessage"></p><div class="sp-confirm-actions"><button type="button" class="sp-btn sp-btn-secondary" data-confirm-cancel data-sp-text="confirm_cancel">Cancel</button><button type="button" class="sp-btn sp-btn-danger" data-confirm-accept data-sp-text="confirm_accept">Continue</button></div></div>

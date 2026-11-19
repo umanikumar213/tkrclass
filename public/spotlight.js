@@ -180,30 +180,47 @@
     await ensureConfig();
     if (turnstileVerified) return undefined;
     if (!turnstileKey) return undefined;
-    if (turnstileWidget === null) await installTurnstile($('turnstileNote'));
-    if (!(await loadTurnstile()) || turnstileWidget === null) {
-      throw new Error(t('security_load_error'));
-    }
-    if (turnstileToken) {
-      const token = turnstileToken;
+    // A separate top-layer dialog keeps managed challenges usable from either
+    // the sticky Like button or the otherwise closed note composer.
+    const dialog = $('spotlightSecurityDialog');
+    const cancelButton = dialog?.querySelector('[data-security-cancel]');
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      turnstileWaiters.splice(0).forEach(resolve => resolve(null));
+      if (dialog?.open) dialog.close();
+    };
+    dialog?.addEventListener('cancel', cancel);
+    cancelButton?.addEventListener('click', cancel);
+    if (dialog && !dialog.open) dialog.showModal();
+    try {
+      if (turnstileWidget === null) await installTurnstile($('turnstileNote'));
+      if (cancelled) throw new Error(t('security_try_again'));
+      if (!(await loadTurnstile()) || turnstileWidget === null) {
+        throw new Error(t('security_load_error'));
+      }
+      if (turnstileToken) {
+        const token = turnstileToken;
+        turnstileToken = null;
+        return token;
+      }
+      const token = await new Promise((resolve) => {
+        turnstileWaiters.push(resolve);
+        try { window.turnstile.execute(turnstileWidget); }
+        catch { turnstileWaiters.splice(turnstileWaiters.indexOf(resolve), 1); resolve(null); }
+        window.setTimeout(() => {
+          const index = turnstileWaiters.indexOf(resolve);
+          if (index !== -1) { turnstileWaiters.splice(index, 1); resolve(null); }
+        }, 120000);
+      });
+      if (!token) throw new Error(t('security_try_again'));
       turnstileToken = null;
       return token;
+    } finally {
+      dialog?.removeEventListener('cancel', cancel);
+      cancelButton?.removeEventListener('click', cancel);
+      if (dialog?.open) dialog.close();
     }
-    $('turnstileNote')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    showToast(t('security_complete'));
-    const token = await new Promise((resolve) => {
-      turnstileWaiters.push(resolve);
-      if (turnstileWidget !== null && window.turnstile) {
-        try { window.turnstile.execute(turnstileWidget); } catch { /* Visible challenge can still be completed manually. */ }
-      }
-      window.setTimeout(() => {
-        const index = turnstileWaiters.indexOf(resolve);
-        if (index !== -1) { turnstileWaiters.splice(index, 1); resolve(null); }
-      }, 120000);
-    });
-    if (!token) throw new Error(t('security_try_again'));
-    turnstileToken = null;
-    return token;
   };
   const resetTurnstile = () => {
     turnstileToken = null;
@@ -242,6 +259,7 @@
     let listRequestId = 0;
     let leaderRequestId = 0;
     let listObserver = null;
+    let autoLoadBlocked = false;
     const renderChipGroup = (label, items, value, onPick) => {
       const group = make('div', 'sp-filter-group');
       group.append(make('span', 'sp-filter-label', label));
@@ -296,13 +314,18 @@
       if (state.loading && append) return;
       const requestId = ++listRequestId;
       state.loading = true;
+      autoLoadBlocked = false;
       if (!append) {
         renderSkeletons();
-        more.hidden = !state.hasMore;
+        more.hidden = true;
       } else {
         grid.querySelector('[data-list-error]')?.remove();
         more.disabled = true;
         more.textContent = t('loading_students');
+        const skeletons = make('div', 'sp-append-skeletons');
+        skeletons.dataset.appendSkeletons = 'true';
+        skeletons.append(make('div', 'sp-skeleton'), make('div', 'sp-skeleton'));
+        grid.append(skeletons);
       }
       const params = new URLSearchParams({ page: String(state.page) });
       if (state.year) params.set('year', state.year);
@@ -312,6 +335,7 @@
       try {
         const data = await getJSON(`/api/spotlight/students?${params}`);
         if (requestId !== listRequestId) return;
+        grid.querySelector('[data-append-skeletons]')?.remove();
         const students = Array.isArray(data.students) ? data.students : [];
         if (!append) grid.replaceChildren();
         students.forEach((student) => grid.append(studentCard(student)));
@@ -329,7 +353,10 @@
         }
       } catch (error) {
         if (requestId !== listRequestId) return;
+        autoLoadBlocked = true;
+        grid.querySelector('[data-append-skeletons]')?.remove();
         if (!append) {
+          state.hasMore = false;
           grid.replaceChildren();
           const failed = make('div', 'sp-state');
           failed.append(make('strong', '', t('directory_load_error')), make('span', '', error.message || t('try_again')));
@@ -344,12 +371,13 @@
           retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', () => loadStudents(true));
           failed.append(retry); grid.append(failed);
         }
+        more.textContent = t('retry');
         more.hidden = !state.hasMore;
       } finally {
         if (requestId === listRequestId) {
           state.loading = false;
           more.disabled = false;
-          if (listObserver && state.hasMore) {
+          if (listObserver && state.hasMore && !autoLoadBlocked) {
             listObserver.unobserve(more);
             listObserver.observe(more);
           }
@@ -439,7 +467,7 @@
     });
     more.addEventListener('click', () => {
       if (!state.hasMore || state.loading) return;
-      state.page += 1;
+      if (!autoLoadBlocked) state.page += 1;
       loadStudents(true);
     });
     const randomAction = async (event) => {
@@ -456,7 +484,7 @@
     $('randomProfileBottom').addEventListener('click', () => $('randomProfile').click());
     if ('IntersectionObserver' in window) {
       listObserver = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting) && state.hasMore && !state.loading) {
+        if (entries.some((entry) => entry.isIntersecting) && state.hasMore && !state.loading && !autoLoadBlocked) {
           state.page += 1;
           loadStudents(true);
         }
@@ -519,7 +547,7 @@
         );
         const tools = make('div', '');
          const time = make('div', 'sp-time', spotlightUI.relativeTime(note.approved_at || note.created_at));
-         const report = make('button', 'sp-action sp-report', '⋯');
+         const report = make('button', 'sp-action sp-report', t('report_menu_icon'));
          report.type = 'button'; report.dataset.reportMenu = 'true'; report.setAttribute('aria-label', t('report_menu_aria')); report.setAttribute('aria-expanded', 'false');
          const menu = make('div', 'sp-report-menu');
          menu.hidden = true;
@@ -625,6 +653,9 @@
         const stat = make('div', 'sp-profile-stat');
         const count = make('b', '', String(Number(value) || 0));
          if (index === 0) count.id = 'profileLikeCount';
+        const emoji = make('span', 'sp-stat-emoji', t(index === 0 ? 'like_emoji' : 'notes_emoji'));
+        emoji.setAttribute('aria-hidden', 'true');
+        stat.append(emoji);
         stat.append(count, make('span', '', label));
         stats.append(stat);
       });
@@ -634,7 +665,6 @@
       renderNotes(Array.isArray(data.notes) ? data.notes : []);
       noteWall.hidden = false;
       $('openNoteComposer').hidden = false;
-      installTurnstile($('turnstileNote'));
       const form = $('noteForm');
       const textInput = $('noteText');
       const counter = $('noteCounter');
@@ -659,6 +689,7 @@
       closeNoteButton.addEventListener('click', closeNoteSheet);
       leaveNote.addEventListener('click', (event) => { if (event.target === leaveNote) closeNoteSheet(); });
       document.addEventListener('keydown', (event) => {
+        if ($('spotlightSecurityDialog')?.open) return;
         if (leaveNote.hidden) return;
         if (event.key === 'Escape') { event.preventDefault(); closeNoteSheet(); return; }
         if (event.key !== 'Tab') return;
@@ -671,6 +702,7 @@
       textInput.addEventListener('input', () => {
         counter.textContent = copyText('note_counter', { count: textInput.value.length });
         counter.setAttribute('aria-label', copyText('note_counter_aria', { count: textInput.value.length }));
+        counter.style.setProperty('--note-progress', `${Math.min(200, textInput.value.length) * 1.8}deg`);
       });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -686,6 +718,7 @@
          setMessage($('noteMessage'), response.message || t('note_review'), 'success');
          markLocallyVerified();
          textInput.value = ''; counter.textContent = copyText('note_counter', { count: 0 });
+         counter.style.setProperty('--note-progress', '0deg');
           showToast(t('note_review'));
           closeNoteSheet();
        } catch (error) { setMessage($('noteMessage'), error.message || t('note_send_error'), 'error'); }

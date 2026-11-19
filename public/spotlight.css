@@ -7,15 +7,18 @@
   --surface2: #1e1e2e;
   --surface-2: var(--surface2);
   --text: #f5f5fa;
-  --muted: #b0afc4;
+  --muted: #9a9ab0;
   --faint: #a09fb5;
   --line: #343346;
   --accent: linear-gradient(135deg, #ff3d7f 0%, #a23cff 50%, #3d7bff 100%);
   --like: #ff3d7f;
+  --like-ink: #ff85b0;
   --pink: var(--like);
   --purple: #a23cff;
   --blue: #3d7bff;
   --success: #2ee59d;
+  --success-ink: #2ee59d;
+  --danger-ink: #ff91a3;
   --danger: #ff7185;
   --gold: #f6c75b;
   --silver: #c5cee2;
@@ -28,6 +31,9 @@
 }
 
 :root[data-theme="light"] {
+  --success-ink: #076542;
+  --danger-ink: #a31f42;
+  --like-ink: #af1c50;
   color-scheme: light;
   --bg: #f4f3fa;
   --surface: #fff;
@@ -43,6 +49,9 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --success-ink: #076542;
+    --danger-ink: #a31f42;
+    --like-ink: #af1c50;
     color-scheme: light;
     --bg: #f4f3fa;
     --surface: #fff;
@@ -162,7 +171,7 @@ a {
   background: var(--accent);
   background-clip: text;
   color: transparent;
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 800;
   letter-spacing: -.06em;
   line-height: 1.05;
@@ -340,7 +349,7 @@ a {
   padding: 12px 20px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(110deg, #37122fe8, #20133de8), var(--accent);
+  background: linear-gradient(#0003, #0003), var(--accent);
   color: #fff;
   font-size: 12px;
   font-weight: 800;
@@ -356,7 +365,7 @@ a {
 
 .sp-random:hover,
 .sp-btn:hover {
-  filter: brightness(1.12);
+  filter: brightness(1.04);
   transform: translateY(-2px);
 }
 
@@ -400,7 +409,7 @@ a {
 .sp-btn-like.is-liked {
   border: 1px solid #ff3d7f66;
   background: var(--surface2);
-  color: var(--like);
+  color: var(--like-ink);
   box-shadow: none;
 }
 
@@ -545,7 +554,7 @@ a {
 
 .sp-chip[aria-pressed="true"] {
   border-color: transparent;
-  background: linear-gradient(110deg, #37122fe8, #20133de8), var(--accent);
+  background: linear-gradient(#0003, #0003), var(--accent);
   color: #fff;
 }
 
@@ -621,6 +630,17 @@ a {
   gap: 10px;
 }
 
+.sp-append-skeletons {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sp-append-skeletons .sp-skeleton {
+  aspect-ratio: 1;
+}
+
 .sp-student {
   position: relative;
   display: block;
@@ -649,6 +669,20 @@ a {
   background: var(--avatar-gradient, var(--accent));
   font-size: 36px;
   letter-spacing: -.04em;
+}
+
+.sp-avatar {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar-gradient, var(--accent));
+  color: #fff;
+  font-weight: 800;
 }
 
 .sp-avatar img {
@@ -721,15 +755,19 @@ a {
 }
 
 .sp-podium {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   align-items: end;
   gap: 8px;
   margin: 18px 0 15px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 10px 3px 5px;
 }
 
 .sp-podium-card {
   display: flex;
+  flex: 1 0 112px;
+  scroll-snap-align: start;
   min-width: 0;
   flex-direction: column;
   align-items: center;
@@ -767,7 +805,7 @@ a {
 }
 
 .sp-podium-rank {
-  color: var(--rank-color);
+  color: var(--muted);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .08em;
@@ -871,7 +909,8 @@ a {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 27px;
-  background: var(--surface);
+  background: #151321;
+  color: #f5f5fa;
   box-shadow: var(--shadow);
 }
 
@@ -885,7 +924,7 @@ a {
 
 .sp-profile-backdrop {
   position: absolute;
-  inset: 0 0 44%;
+  inset: 0;
   overflow: hidden;
   background: var(--accent);
   pointer-events: none;
@@ -941,6 +980,7 @@ a {
 
 .sp-profile-name {
   margin: 0;
+  color: #f5f5fa;
   font-size: clamp(27px, 7vw, 42px);
   font-weight: 800;
   letter-spacing: -.07em;
@@ -950,7 +990,7 @@ a {
 
 .sp-roll {
   margin-top: 7px;
-  color: var(--muted);
+  color: #d1ccdf;
   font-size: 11px;
   letter-spacing: .07em;
 }
@@ -970,10 +1010,10 @@ a {
   min-height: 25px;
   align-items: center;
   padding: 3px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid #ffffff38;
   border-radius: 999px;
-  background: var(--surface2);
-  color: var(--muted);
+  background: #ffffff14;
+  color: #eeebf5;
 }
 
 .sp-profile-actions {
@@ -998,21 +1038,22 @@ a {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid #ffffff38;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--surface2) 75%, transparent);
-  color: var(--muted);
+  background: #ffffff14;
+  backdrop-filter: blur(10px);
+  color: #eeebf5;
   font-size: 10px;
 }
 
 .sp-profile-stat b {
-  color: var(--text);
+  color: #f5f5fa;
   font-size: 19px;
   font-weight: 800;
 }
 
 .sp-profile-stat:last-child b {
-  color: var(--like);
+  color: #ff85b0;
 }
 
 .sp-notes {
@@ -1153,8 +1194,10 @@ a {
   height: 48px;
   flex: none;
   place-items: center;
-  border: 2px solid #a23cff;
+  border: 0;
   border-radius: 50%;
+  background: radial-gradient(closest-side, var(--surface) 84%, transparent 87%),
+    conic-gradient(var(--like) var(--note-progress, 0deg), var(--line) 0);
   color: var(--muted);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
@@ -1167,6 +1210,14 @@ a {
 
 .sp-turnstile:empty {
   display: none;
+}
+
+#spotlightSecurityDialog {
+  width: min(calc(100% - 16px), 430px);
+}
+
+#spotlightSecurityDialog .sp-confirm-content {
+  padding: 16px;
 }
 
 .sp-message {
@@ -1183,12 +1234,12 @@ a {
 
 .sp-message.error {
   background: #ff657c20;
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .sp-message.success {
   background: #2ee59d1b;
-  color: var(--success);
+  color: var(--success-ink);
 }
 
 .sp-state {
@@ -1550,9 +1601,21 @@ a {
 }
 
 .sp-settings-label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--text);
   font-size: 12px;
   font-weight: 800;
+}
+
+.sp-settings-input {
+  min-height: 48px;
+  padding: 12px;
+}
+
+textarea.sp-settings-input {
+  min-height: 110px;
 }
 
 .sp-settings-current,
@@ -1603,6 +1666,9 @@ a {
   justify-self: start;
   min-height: 44px;
   padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
 }
 
 .sp-settings-footer {
@@ -1680,7 +1746,7 @@ a {
   padding: 0 18px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(110deg, #37122fe8, #20133de8), var(--accent);
+  background: linear-gradient(#0003, #0003), var(--accent);
   color: #fff;
   font-size: 12px;
   font-weight: 800;
@@ -2040,6 +2106,7 @@ a {
 
   .sp-admin-tabs {
     position: fixed;
+    top: auto;
     z-index: 20;
     right: 0;
     bottom: 0;

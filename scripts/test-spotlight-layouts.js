@@ -75,7 +75,22 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         await page.locator('#studentGrid .sp-student').first().waitFor();
         assert.equal(await page.locator('#studentSearch').inputValue(), '');
         if (width === 390) {
+          let failedPageRequests = 0;
+          if (theme === 'dark') {
+            await page.route('**/api/spotlight/students?*', route => {
+              if (new URL(route.request().url()).searchParams.get('page') !== '2') return route.continue();
+              failedPageRequests++;
+              return route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Temporary test failure"}' });
+            });
+          }
           await page.locator('#loadMore').scrollIntoViewIfNeeded();
+          if (theme === 'dark') {
+            await page.locator('[data-list-error]').waitFor();
+            await page.waitForTimeout(400);
+            assert.equal(failedPageRequests, 1, 'Infinite scrolling must not retry failed pages in a loop');
+            await page.unroute('**/api/spotlight/students?*');
+            await page.locator('[data-list-error] button').click();
+          }
           await page.waitForFunction(() => document.querySelectorAll('#studentGrid .sp-student').length === 35);
         }
         // Explicit theme choice survives reload and does not contain any credential.
@@ -90,6 +105,7 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         await page.goto(`${base}/spotlight/${first}`);
         await page.locator('[data-like-button]').waitFor();
         await checkPage(page, `Profile ${width} ${theme}`);
+        assert.equal(await page.locator('.sp-profile-name').evaluate(node => getComputedStyle(node).color), 'rgb(245, 245, 250)', 'Profile name must remain readable on the dark photo in both themes');
         await screenshot(page, `profile-${width}-${theme}`);
         await page.locator('#openNoteComposer').click();
         await page.locator('#noteText').waitFor();
@@ -119,6 +135,7 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         const group = page.locator('#setting-brand_name').locator('xpath=ancestor::details[1]');
         if (!(await group.evaluate(node => node.open))) await group.locator('summary').click();
         await page.locator('#setting-brand_name').fill('Unsaved preview');
+        assert.ok((await page.locator('#setting-brand_name').boundingBox()).height >= 44, 'Settings inputs need phone-sized touch targets');
         const count = page.locator('[data-unsaved-count]');
         await count.waitFor();
         assert.match(await count.textContent(), /1/);
@@ -130,6 +147,49 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
     }
   }
   assert.deepEqual(errors, [], 'Browser layout checks should have no JavaScript errors');
+  await runChallengeChecks({ browser, base, first, loader });
   console.log('PASS: Discover, profile, note sheet and admin at 360/390/430/1440px in both themes, saved theme, search clearing, automatic pagination, custom confirmations and unsaved settings.');
+}
+
+async function runChallengeChecks({ browser, base, first, loader }) {
+  const context = await browser.newContext({
+    viewport: { width: 360, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': '203.0.113.100' },
+  });
+  loader.env.TURNSTILE_SITE_KEY = 'test-site-key';
+  loader.env.TURNSTILE_SECRET = 'test-secret';
+  try {
+    const page = await context.newPage();
+    await page.route('https://challenges.cloudflare.com/turnstile/v0/api.js?*', route => route.fulfill({
+      contentType: 'application/javascript',
+      body: `window.challengeExecutions=0;window.turnstile={
+        render(node,options){window.challengeOptions=options;window.challengeNode=node;
+          const widget=document.createElement('div');widget.textContent='Test security widget';
+          node.append(widget);return 1;},
+        execute(){window.challengeExecutions++;
+          window.challengeWasVisible=document.querySelector('#spotlightSecurityDialog').open &&
+            window.challengeNode.getBoundingClientRect().width>0;
+          setTimeout(()=>window.challengeOptions.callback('valid-test-token'),30);},
+        reset(){}
+      };`,
+    }));
+    await page.goto(`${base}/spotlight/${first}`);
+    await page.locator('[data-like-button]').click();
+    await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
+    assert.equal(await page.evaluate(() => window.challengeWasVisible), true, 'Like security check must not be trapped inside the hidden note composer');
+    assert.equal(await page.locator('#spotlightSecurityDialog').evaluate(node => node.open), false);
+    await page.locator('#openNoteComposer').click();
+    await page.locator('#noteText').fill('A verified challenge test note');
+    await page.locator('#noteSubmit').click();
+    await page.locator('#toast.show', { hasText: 'Your note will appear after review.' }).waitFor();
+    assert.equal(await page.evaluate(() => window.challengeExecutions), 1, 'Remembered verification should avoid another challenge for the note');
+    await page.locator('[data-like-button]').click();
+    await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'false');
+    assert.equal(await page.evaluate(() => window.challengeExecutions), 1);
+    console.log('PASS: managed security check stays visible outside the note sheet and remembered verification works across likes and notes.');
+  } finally {
+    delete loader.env.TURNSTILE_SITE_KEY;
+    delete loader.env.TURNSTILE_SECRET;
+    await context.close();
+  }
 }
 module.exports = { runLayoutChecks };
