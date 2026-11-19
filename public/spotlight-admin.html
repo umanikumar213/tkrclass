@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f7f7fb">
   <title data-sp-text="admin_page_title">TKR Spotlight · Admin</title>
   <link rel="stylesheet" href="/spotlight.css">
   <script defer src="/spotlight-editor.js"></script>
+  <script defer src="/spotlight-ui.js"></script>
   <script defer src="/spotlight.js"></script>
 </head>
 <body data-spotlight-page="admin">
@@ -17,7 +18,7 @@
         <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
         <span><span class="sp-brand-name" data-sp-text="brand_name">TKR Spotlight</span><span class="sp-brand-sub" data-sp-text="admin_review_brand_sub">Review desk</span></span>
       </a>
-      <a class="sp-back" href="/spotlight" data-sp-text="admin_public_page">Public page</a>
+       <div class="sp-header-actions"><span class="sp-admin-avatar" aria-hidden="true" data-sp-text="admin_avatar">TKR</span><a class="sp-back" href="/spotlight" data-sp-text="admin_public_page">Public page</a><button type="button" class="sp-theme-toggle" data-theme-toggle disabled aria-label="Toggle color theme"><span class="sp-theme-icon" aria-hidden="true"></span><span data-sp-text="theme_toggle">Theme</span></button></div>
     </header>
     <section id="adminLoginView" class="sp-login-card">
       <div class="sp-kicker" data-sp-text="login_staff_kicker">Staff only</div>
@@ -35,16 +36,20 @@
         <div><div class="sp-kicker" data-sp-text="admin_header">TKR Spotlight</div><h1 class="sp-title" style="font-size:34px" data-sp-text="admin_review_title">Review desk</h1></div>
         <button type="button" id="adminLogout" class="sp-btn sp-btn-secondary" data-sp-text="admin_logout">Sign out</button>
       </div>
-      <nav id="adminTabs" class="sp-admin-tabs" aria-label="Moderation views" data-sp-aria="admin_tabs_aria">
-        <button type="button" class="sp-admin-tab" data-admin-tab="pending" aria-selected="true"><span data-sp-text="admin_pending_tab">Pending</span> <span id="pendingBadge" class="sp-badge">0</span></button>
-        <button type="button" class="sp-admin-tab" data-admin-tab="reported" aria-selected="false" data-sp-text="admin_reported_tab">Reported</button>
-        <button type="button" class="sp-admin-tab" data-admin-tab="students" aria-selected="false" data-sp-text="admin_students_tab">Hidden students</button>
-        <button type="button" class="sp-admin-tab" data-admin-tab="settings" aria-selected="false" data-sp-text="content_settings_tab">Content &amp; Settings</button>
-      </nav>
-      <div id="adminContent" aria-live="polite"></div>
-      <div id="adminError" class="sp-message" role="alert"></div>
+     <div class="sp-admin-layout">
+       <nav id="adminTabs" class="sp-admin-tabs" aria-label="Moderation views" data-sp-aria="admin_tabs_aria">
+         <button type="button" class="sp-admin-tab" data-admin-tab="pending" aria-selected="true"><span data-sp-text="admin_pending_tab">Pending</span> <span id="pendingBadge" class="sp-badge">0</span></button>
+         <button type="button" class="sp-admin-tab" data-admin-tab="reported" aria-selected="false" data-sp-text="admin_reported_tab">Reported</button>
+         <button type="button" class="sp-admin-tab" data-admin-tab="students" aria-selected="false" data-sp-text="admin_students_tab">Hidden students</button>
+         <button type="button" class="sp-admin-tab" data-admin-tab="settings" aria-selected="false" data-sp-text="content_settings_tab">Content &amp; Settings</button>
+       </nav>
+       <div class="sp-admin-main"><div id="adminContent" aria-live="polite"></div><div id="adminError" class="sp-message" role="alert"></div></div>
+     </div>
     </section>
     <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+     <dialog id="spotlightConfirmDialog" class="sp-confirm-dialog" aria-labelledby="confirmDialogTitle">
+       <div class="sp-confirm-content"><h2 id="confirmDialogTitle" data-sp-text="confirm_title">One quick check</h2><p id="confirmDialogMessage"></p><div class="sp-confirm-actions"><button type="button" class="sp-btn sp-btn-secondary" data-confirm-cancel data-sp-text="confirm_cancel">Keep editing</button><button type="button" class="sp-btn sp-btn-danger" data-confirm-accept data-sp-text="confirm_accept">Continue</button></div></div>
+     </dialog>
   </main>
 </body>
 </html>

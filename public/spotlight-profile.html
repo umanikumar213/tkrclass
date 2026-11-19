@@ -3,10 +3,11 @@
 <head>
   <!--SPOTLIGHT_META-->
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f7f7fb">
   <title data-sp-text="directory_page_title">TKR Spotlight</title>
   <link rel="stylesheet" href="/spotlight.css">
+  <script defer src="/spotlight-ui.js"></script>
   <script defer src="/spotlight.js"></script>
 </head>
 <body data-spotlight-page="profile">
@@ -17,7 +18,7 @@
         <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
         <span><span class="sp-brand-name" data-sp-text="brand_name">TKR Spotlight</span><span class="sp-brand-sub" data-sp-text="tagline">A little appreciation goes far</span></span>
       </a>
-      <a class="sp-back" href="/spotlight"><span aria-hidden="true" data-sp-text="back_arrow">←</span> <span data-sp-text="discover_link">Discover</span></a>
+       <div class="sp-header-actions"><a class="sp-back" href="/spotlight"><span aria-hidden="true" data-sp-text="back_arrow">←</span> <span data-sp-text="discover_link">Discover</span></a><button type="button" class="sp-theme-toggle" data-theme-toggle disabled aria-label="Toggle color theme"><span class="sp-theme-icon" aria-hidden="true"></span><span data-sp-text="theme_toggle">Theme</span></button></div>
     </header>
     <div id="profileView" aria-live="polite">
       <div class="sp-skeleton" style="height:210px"></div>
@@ -27,20 +28,27 @@
       <div class="sp-section-head"><div><h2 class="sp-section-title" data-sp-text="notes_wall_title">The kind words wall</h2><p class="sp-section-caption" data-sp-text="notes_wall_subtitle">Notes show up here after a quick review.</p></div></div>
       <div id="notesList" class="sp-notes"></div>
     </section>
-    <section id="leaveNote" class="sp-section" hidden>
-      <form id="noteForm" class="sp-composer">
-        <div class="sp-composer-heading" data-sp-text="note_composer_title">Leave a note</div>
+     <button type="button" id="openNoteComposer" data-open-note class="sp-write-note" hidden><span aria-hidden="true" data-sp-text="note_open_emoji">✍️</span><span data-sp-text="note_open_label">Write a note</span></button>
+     <section id="leaveNote" class="sp-sheet-backdrop" hidden>
+       <div class="sp-sheet" id="noteSheet" role="dialog" aria-modal="true" aria-labelledby="noteSheetTitle">
+       <button type="button" id="closeNoteComposer" class="sp-sheet-close" data-sp-aria="sheet_close_aria" aria-label="Close"><span aria-hidden="true" data-sp-text="sheet_close_icon">×</span></button>
+       <form id="noteForm" class="sp-composer">
+         <div class="sp-composer-heading" id="noteSheetTitle" data-sp-text="note_composer_title">Leave a note</div>
         <p class="sp-composer-hint" data-sp-text="note_composer_hint">Say something thoughtful. Notes are reviewed before they appear.</p>
         <label for="noteText" class="sp-kicker" style="display:block;margin-bottom:6px" data-sp-text="note_message_label">Your message</label>
         <textarea id="noteText" class="sp-textarea" maxlength="200" placeholder="A kind word can change someone's day." data-sp-placeholder="note_placeholder" required></textarea>
-        <div class="sp-compose-bottom"><span id="noteCounter" class="sp-counter" data-sp-template="note_counter" data-sp-count="0">0 / 200</span><button type="submit" id="noteSubmit" class="sp-btn" data-sp-text="note_send">Send for review</button></div>
+         <div class="sp-compose-bottom"><span id="noteCounter" class="sp-counter" data-sp-template="note_counter" data-sp-count="0">0 / 200</span><button type="submit" id="noteSubmit" class="sp-btn" data-sp-text="note_send">Send for review</button></div>
         <div id="turnstileNote" class="sp-turnstile"></div>
         <div id="noteMessage" class="sp-message" role="status"></div>
       </form>
+       </div>
     </section>
     <footer class="sp-footer"><span data-sp-text="profile_remove_prefix">Want your profile removed?</span> <a id="removeProfile" aria-label="Want your profile removed? Contact admin" data-sp-aria="note_remove_profile" data-sp-href="profile_remove_url" href="#" data-sp-text="profile_remove_link">Contact admin</a></footer>
     <div id="shareDialogHost"></div>
     <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+     <dialog id="spotlightConfirmDialog" class="sp-confirm-dialog" aria-labelledby="confirmDialogTitle">
+       <div class="sp-confirm-content"><h2 id="confirmDialogTitle" data-sp-text="confirm_title">One quick check</h2><p id="confirmDialogMessage"></p><div class="sp-confirm-actions"><button type="button" class="sp-btn sp-btn-secondary" data-confirm-cancel data-sp-text="confirm_cancel">Cancel</button><button type="button" class="sp-btn sp-btn-danger" data-confirm-accept data-sp-text="confirm_accept">Continue</button></div></div>
+     </dialog>
   </main>
 </body>
 </html>

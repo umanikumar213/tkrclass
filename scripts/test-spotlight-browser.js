@@ -14,6 +14,8 @@ async function runBrowserChecks({ base, first, db, loader }) {
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': browserNetwork },
     });
+    // Exercise the manual pagination fallback here; the layout matrix checks automatic pagination.
+    await context.addInitScript(() => { delete window.IntersectionObserver; });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -58,18 +60,21 @@ async function runBrowserChecks({ base, first, db, loader }) {
     assert.equal(await privatePage.locator('#profileLikeCount').textContent(), '2');
     assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'true');
     await privateContext.close();
+    await page.locator('#openNoteComposer').click();
     await page.locator('#noteText').fill('A kind browser test note');
     assert.equal(await page.locator('#noteCounter').textContent(), '24 / 200');
     await page.locator('#noteSubmit').click();
-    await page.locator('#noteMessage.success').waitFor();
+    await page.locator('#noteMessage.success').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#noteMessage').textContent(), 'Your note will appear after review.');
+    await page.locator('#toast.show', { hasText: 'Your note will appear after review.' }).waitFor();
     const note = (await db.query(`SELECT id FROM spotlight_notes WHERE text='A kind browser test note'`)).rows[0];
     assert.ok(note);
+    if (await page.locator('#noteSheet').isVisible()) await page.keyboard.press('Escape');
     await page.locator('button', { hasText: 'Share profile' }).click();
     // Chromium may expose navigator.share in some environments; inspect fallback when present.
-    if (await page.locator('[role=dialog]').count()) {
+    if (await page.locator('#shareDialogHost [role=dialog]').count()) {
       assert.ok((await page.locator('a', { hasText: 'WhatsApp' }).getAttribute('href')).startsWith('https://wa.me/?text='));
-      await page.locator('[role=dialog] button', { hasText: 'Close' }).click();
+      await page.locator('#shareDialogHost [role=dialog] button', { hasText: 'Close' }).click();
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     const adminPage = await context.newPage();
@@ -88,8 +93,9 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await publicNote.locator('[data-reaction=heart].is-selected').waitFor();
     await page.reload();
     await page.locator(`[data-note-id="${note.id}"] [data-reaction=heart].is-selected`).waitFor();
-    page.once('dialog', dialog => dialog.accept());
+    await page.locator(`[data-note-id="${note.id}"] [data-report-menu]`).click();
     await page.locator(`[data-note-id="${note.id}"] [data-report]`).click();
+    await page.locator('[data-confirm-accept]').click();
     await page.locator(`[data-note-id="${note.id}"]`).waitFor({ state: 'detached' });
     await adminPage.locator('[data-admin-tab=reported]').click();
     const report = adminPage.locator('.sp-admin-note', { hasText: 'A kind browser test note' });
@@ -109,7 +115,14 @@ async function runBrowserChecks({ base, first, db, loader }) {
     await page.locator('[data-like-button]').click();
     await page.waitForFunction(() => document.querySelector('[data-like-button]').getAttribute('aria-pressed') === 'false');
     await adminPage.locator('[data-admin-tab=settings]').click();
-    await adminPage.locator('#setting-brand_name').waitFor();
+    const openSetting = async key => {
+      const field = adminPage.locator(`#setting-${key}`);
+      await field.waitFor({ state: 'attached' });
+      const group = field.locator('xpath=ancestor::details[1]');
+      if (await group.count() && !(await group.evaluate(node => node.open))) await group.locator('summary').click();
+      return field;
+    };
+    await openSetting('brand_name');
     const saveSettings = async () => {
       const outgoing = adminPage.waitForRequest(r => r.method() === 'POST' && r.url().endsWith('/admin/settings'));
       const response = adminPage.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/admin/settings'));
@@ -122,17 +135,19 @@ async function runBrowserChecks({ base, first, db, loader }) {
       });
       return body.changes;
     };
-    await adminPage.locator('#setting-brand_name').fill('Campus <Edited>');
+    await (await openSetting('brand_name')).fill('Campus <Edited>');
     assert.equal(await adminPage.locator('#setting-brand_name').inputValue(), 'Campus <Edited>');
     assert.deepEqual(await saveSettings(), { brand_name: 'Campus <Edited>' });
     await page.goto(`${base}/spotlight`);
     await page.locator('.sp-brand-name', { hasText: 'Campus <Edited>' }).waitFor();
     assert.equal(await page.locator('.sp-brand-name edited').count(), 0);
+    await openSetting('brand_name');
     await adminPage.locator('.sp-settings-field', { has: adminPage.locator('#setting-brand_name') }).locator('.sp-settings-reset').click();
     assert.equal(await adminPage.locator('#setting-brand_name').inputValue(), 'TKR Spotlight');
     assert.deepEqual(await saveSettings(), { brand_name: null });
     await page.reload();
     await page.locator('.sp-brand-name', { hasText: 'TKR Spotlight' }).waitFor();
+    await openSetting('like_device_check');
     assert.equal(await adminPage.locator('#setting-like_device_check').isChecked(), true);
     const years = adminPage.locator('#setting-random_profile_years');
     await years.locator('input[data-year="1st Year"]').check();
@@ -145,6 +160,7 @@ async function runBrowserChecks({ base, first, db, loader }) {
     const nextRandom = await context.request.get(`${base}/api/spotlight/random`);
     assert.equal(nextRandom.status(), 200);
     assert.notEqual((await nextRandom.json()).roll_number, roll1);
+    await openSetting('random_profile_years');
     await adminPage.locator('.sp-settings-field', { has: adminPage.locator('#setting-random_profile_years') }).locator('.sp-settings-reset').click();
     assert.deepEqual(await saveSettings(), { random_profile_years: null });
     await adminPage.locator('#adminLogout').click();
@@ -154,6 +170,7 @@ async function runBrowserChecks({ base, first, db, loader }) {
     assert.equal(await adminPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
     await context.close();
+    await require('./test-spotlight-layouts').runLayoutChecks({ browser, base, first, db, loader });
     console.log('PASS: phone browser discovery, pagination, safe text, persistent likes/reactions, note review, reporting, sharing, visibility controls, and logout.');
   } finally { await browser.close(); }
 }

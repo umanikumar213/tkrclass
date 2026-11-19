@@ -19,6 +19,8 @@
       else changes[key] = value;
       const saveButton = content.querySelector('.sp-settings-save');
       if (saveButton) saveButton.disabled = saving || !Object.keys(changes).length;
+      const count = content.querySelector('[data-unsaved-count]');
+      if (count) count.textContent = copyText('settings_unsaved_count', { count: Object.keys(changes).length });
     };
     const render = () => {
       content.replaceChildren();
@@ -36,9 +38,11 @@
         byGroup.get(group).push(field);
       });
       byGroup.forEach((fields, groupName) => {
-        const section = make('section', 'sp-settings-group');
+        const section = make('details', 'sp-settings-group');
+        section.open = true;
         const groupKey = `group_${String(groupName).toLowerCase().replace(/[^a-z]+/g, '_')}`;
-        section.append(make('h2', 'sp-section-title', t(groupKey) || groupName));
+        const summary = make('summary', 'sp-section-title', t(groupKey) || groupName);
+        section.append(summary);
         fields.forEach((field) => {
           const row = make('div', 'sp-settings-field');
           const labelText = t(`setting_label_${field.key}`) || copyText('setting_field_label', { key: field.key });
@@ -140,11 +144,13 @@
         content.append(section);
       });
       const footer = make('div', 'sp-settings-footer');
+      const unsaved = make('span', 'sp-unsaved-count', copyText('settings_unsaved_count', { count: Object.keys(changes).length }));
+      unsaved.dataset.unsavedCount = 'true';
       const save = make('button', 'sp-btn sp-settings-save', saving ? t('settings_saving') : t('settings_save'));
       save.type = 'button';
       save.disabled = saving || !Object.keys(changes).length;
       save.addEventListener('click', saveChanges);
-      footer.append(save);
+      footer.append(unsaved, save);
       content.append(footer);
     };
     const saveChanges = async () => {

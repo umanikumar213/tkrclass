@@ -18,6 +18,7 @@
   const t = (key) => String(spotlightTexts[key] ?? '');
   const copyText = (key, values = {}) => t(key).replace(/\{([a-z_]+)\}/gi, (whole, name) =>
     Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : whole);
+  const spotlightUI = window.createSpotlightUI({ t, copyText });
   const applyStaticCopy = () => {
     document.querySelectorAll('[data-sp-text]').forEach((node) => {
       if (Object.prototype.hasOwnProperty.call(spotlightTexts, node.dataset.spText)) node.textContent = t(node.dataset.spText);
@@ -92,9 +93,19 @@
   };
   const makeAvatar = (student, large = false) => {
     const avatar = make('span', `sp-avatar${large ? ' sp-avatar-large' : ''}`, initials(student.name));
-    avatar.setAttribute('aria-hidden', 'true');
+    const rollHash = String(student.roll_number || '').split('').reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 7);
+    avatar.style.setProperty('--avatar-gradient', [
+      'linear-gradient(145deg,#ff3d7f,#a23cff)',
+      'linear-gradient(145deg,#ff8b4a,#ee408d)',
+      'linear-gradient(145deg,#20cbb0,#3d7bff)',
+      'linear-gradient(145deg,#a23cff,#3d7bff)',
+      'linear-gradient(145deg,#e8ad3b,#ed5d76)',
+      'linear-gradient(145deg,#27bca0,#a23cff)',
+    ][rollHash % 6]);
     const image = document.createElement('img');
-    image.alt = '';
+    image.alt = student.name || t('student_fallback');
+    image.width = large ? 112 : 180;
+    image.height = large ? 112 : 180;
     image.loading = 'lazy';
     image.decoding = 'async';
     image.src = `/api/spotlight/photo/${encodeURIComponent(student.roll_number)}`;
@@ -230,6 +241,7 @@
     let searchTimer;
     let listRequestId = 0;
     let leaderRequestId = 0;
+    let listObserver = null;
     const renderChipGroup = (label, items, value, onPick) => {
       const group = make('div', 'sp-filter-group');
       group.append(make('span', 'sp-filter-label', label));
@@ -268,10 +280,10 @@
       link.href = profileLink(student.roll_number);
       link.append(makeAvatar(student));
       const copy = make('span', 'sp-student-copy');
-       copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
-      copy.append(make('span', 'sp-student-meta', `${campusLine(student)} · ${student.roll_number || ''}`));
+      copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
+      copy.append(make('span', 'sp-student-meta', campusLine(student)));
       const counts = make('span', 'sp-card-counts');
-       counts.append(make('span', '', `${t('likes_label')} ${Number(student.like_count) || 0}`), make('span', '', `${t('notes_label')} ${Number(student.note_count) || 0}`));
+      counts.append(make('span', '', `${t('like_emoji')} ${Number(student.like_count) || 0}`), make('span', '', `${t('notes_label')} ${Number(student.note_count) || 0}`));
       copy.append(counts);
       link.append(copy);
       return link;
@@ -286,7 +298,7 @@
       state.loading = true;
       if (!append) {
         renderSkeletons();
-        more.hidden = true;
+        more.hidden = !state.hasMore;
       } else {
         grid.querySelector('[data-list-error]')?.remove();
         more.disabled = true;
@@ -332,11 +344,15 @@
           retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', () => loadStudents(true));
           failed.append(retry); grid.append(failed);
         }
-        more.hidden = true;
+        more.hidden = !state.hasMore;
       } finally {
         if (requestId === listRequestId) {
           state.loading = false;
           more.disabled = false;
+          if (listObserver && state.hasMore) {
+            listObserver.unobserve(more);
+            listObserver.observe(more);
+          }
         }
       }
     }
@@ -360,15 +376,31 @@
         const students = (Array.isArray(data.students) ? data.students : []).slice(0, Number(spotlightSettings.leaderboard_size));
         leaderBox.replaceChildren();
         if (!students.length) { renderLeaderState(t('leader_empty')); return; }
-        students.forEach((student) => {
+        const itemValue = (student) => Number(state.leader === 'trending' ? student.score : (state.leader === 'liked' ? student.like_count : student.note_count)) || 0;
+        const podium = make('div', 'sp-podium');
+        students.slice(0, 3).forEach((student, index) => {
+          const card = make('a', 'sp-podium-card');
+          card.href = profileLink(student.roll_number);
+          card.style.setProperty('--rank-color', ['var(--gold)', 'var(--silver)', 'var(--bronze)'][index]);
+          card.append(make('span', 'sp-podium-rank', copyText('leader_rank', { rank: index + 1 })), makeAvatar(student));
+          card.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
+          card.append(make('span', 'sp-student-meta', campusLine(student)));
+          const podiumCount = make('span', 'sp-leader-count', String(itemValue(student)));
+          podiumCount.append(make('small', '', state.leader === 'trending' ? t('leader_unit_trending') : state.leader === 'liked' ? t('leader_unit_liked') : t('leader_unit_noted')));
+          card.append(podiumCount);
+          podium.append(card);
+        });
+        leaderBox.append(podium);
+        students.slice(3).forEach((student, index) => {
           const link = make('a', 'sp-leader');
           link.href = profileLink(student.roll_number);
+          link.append(make('span', 'sp-leader-rank', String(index + 4)));
           link.append(makeAvatar(student));
           const copy = make('span', 'sp-leader-copy');
           copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
           copy.append(make('span', 'sp-student-meta', campusLine(student)));
           link.append(copy);
-          const value = Number(state.leader === 'trending' ? student.score : (state.leader === 'liked' ? student.like_count : student.note_count)) || 0;
+          const value = itemValue(student);
           const count = make('span', 'sp-leader-count', String(value));
           count.append(make('small', '', state.leader === 'trending' ? t('leader_unit_trending') : state.leader === 'liked' ? t('leader_unit_liked') : t('leader_unit_noted')));
           link.append(count);
@@ -390,7 +422,18 @@
     }
     await loadStudents();
     loadLeaderboard();
+    const clearSearch = $('clearStudentSearch');
+    const syncClear = () => { clearSearch.hidden = !search.value; };
+    clearSearch.addEventListener('click', () => {
+      search.value = '';
+      syncClear();
+      state.query = '';
+      state.page = 1;
+      loadStudents();
+      search.focus();
+    });
     search.addEventListener('input', () => {
+      syncClear();
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => { state.query = search.value.trim(); state.page = 1; loadStudents(); }, 280);
     });
@@ -399,7 +442,7 @@
       state.page += 1;
       loadStudents(true);
     });
-    $('randomProfile').addEventListener('click', async (event) => {
+    const randomAction = async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
       try {
@@ -408,7 +451,18 @@
         window.location.assign(profileLink(data.roll_number));
       } catch (error) { showToast(error.message || t('random_error')); }
       finally { button.disabled = false; }
-    });
+    };
+    $('randomProfile').addEventListener('click', randomAction);
+    $('randomProfileBottom').addEventListener('click', () => $('randomProfile').click());
+    if ('IntersectionObserver' in window) {
+      listObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting) && state.hasMore && !state.loading) {
+          state.page += 1;
+          loadStudents(true);
+        }
+      }, { rootMargin: '240px' });
+      listObserver.observe(more);
+    }
     document.querySelectorAll('[data-leader-tab]').forEach((button) => button.addEventListener('click', () => {
       state.leader = button.dataset.leaderTab;
       document.querySelectorAll('[data-leader-tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab === button)));
@@ -464,10 +518,15 @@
            reactionButton(note, 'fire', t('reaction_fire_label'), t('reaction_fire'), note.react_fire),
         );
         const tools = make('div', '');
-        const time = make('div', 'sp-time', formatDate(note.approved_at || note.created_at));
-        const report = make('button', 'sp-action sp-report');
-         report.type = 'button'; report.dataset.report = 'true'; report.setAttribute('aria-label', t('report_aria')); report.append(svgIcon('report'), make('span', '', t('report_label')));
-        tools.append(time, report);
+         const time = make('div', 'sp-time', spotlightUI.relativeTime(note.approved_at || note.created_at));
+         const report = make('button', 'sp-action sp-report', '⋯');
+         report.type = 'button'; report.dataset.reportMenu = 'true'; report.setAttribute('aria-label', t('report_menu_aria')); report.setAttribute('aria-expanded', 'false');
+         const menu = make('div', 'sp-report-menu');
+         menu.hidden = true;
+         const reportAction = make('button', 'sp-action sp-report-action', t('report_label'));
+         reportAction.type = 'button'; reportAction.dataset.report = 'true';
+         menu.append(reportAction);
+         tools.append(time, report, menu);
         footer.append(reactions, tools);
         card.append(footer);
         notesList.append(card);
@@ -485,13 +544,26 @@
       document.title = `${studentData.name || t('student_fallback')} · ${t('brand_name')}`;
       view.replaceChildren();
       const card = make('section', 'sp-profile-card');
+      const photoBackdrop = make('div', 'sp-profile-backdrop');
+      const backdropPhoto = document.createElement('img');
+      backdropPhoto.alt = '';
+      backdropPhoto.width = 720;
+      backdropPhoto.height = 360;
+      backdropPhoto.loading = 'lazy';
+      backdropPhoto.decoding = 'async';
+      backdropPhoto.src = `/api/spotlight/photo/${encodeURIComponent(studentData.roll_number)}`;
+      backdropPhoto.addEventListener('error', () => backdropPhoto.remove(), { once: true });
+      photoBackdrop.append(backdropPhoto);
+      card.append(photoBackdrop);
       const main = make('div', 'sp-profile-main');
       const person = make('div', 'sp-profile-person');
       person.append(makeAvatar(studentData, true));
       const info = make('div', 'sp-profile-info');
        info.append(make('h1', 'sp-profile-name', studentData.name || t('student_fallback')));
       info.append(make('div', 'sp-roll', studentData.roll_number || roll));
-      info.append(make('div', 'sp-profile-meta', campusLine(studentData)));
+      const chips = make('div', 'sp-profile-meta');
+      [studentData.course, studentData.section, studentData.year].filter(Boolean).forEach((value) => chips.append(make('span', 'sp-profile-chip', value)));
+      info.append(chips);
       person.append(info);
       main.append(person);
       const actions = make('div', 'sp-profile-actions');
@@ -561,13 +633,45 @@
       view.append(card);
       renderNotes(Array.isArray(data.notes) ? data.notes : []);
       noteWall.hidden = false;
-      leaveNote.hidden = false;
+      $('openNoteComposer').hidden = false;
       installTurnstile($('turnstileNote'));
       const form = $('noteForm');
       const textInput = $('noteText');
       const counter = $('noteCounter');
       const submit = $('noteSubmit');
-       textInput.addEventListener('input', () => { counter.textContent = copyText('note_counter', { count: textInput.value.length }); });
+      const noteSheet = $('noteSheet');
+      const openNoteButton = $('openNoteComposer');
+      const closeNoteButton = $('closeNoteComposer');
+      let lastSheetFocus = null;
+      const closeNoteSheet = () => {
+        leaveNote.hidden = true;
+        document.body.classList.remove('sp-sheet-open');
+        lastSheetFocus?.focus?.();
+      };
+      const openNoteSheet = () => {
+        lastSheetFocus = document.activeElement;
+        leaveNote.hidden = false;
+        document.body.classList.add('sp-sheet-open');
+        textInput.focus();
+      };
+      openNoteButton.addEventListener('click', openNoteSheet);
+      closeNoteButton.setAttribute('aria-label', t('sheet_close_aria'));
+      closeNoteButton.addEventListener('click', closeNoteSheet);
+      leaveNote.addEventListener('click', (event) => { if (event.target === leaveNote) closeNoteSheet(); });
+      document.addEventListener('keydown', (event) => {
+        if (leaveNote.hidden) return;
+        if (event.key === 'Escape') { event.preventDefault(); closeNoteSheet(); return; }
+        if (event.key !== 'Tab') return;
+        const focusable = Array.from(noteSheet.querySelectorAll('button:not([disabled]),textarea,input,a[href],[tabindex]:not([tabindex="-1"])')).filter((el) => !el.hidden);
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+      textInput.addEventListener('input', () => {
+        counter.textContent = copyText('note_counter', { count: textInput.value.length });
+        counter.setAttribute('aria-label', copyText('note_counter_aria', { count: textInput.value.length }));
+      });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const text = textInput.value.trim();
@@ -582,6 +686,8 @@
          setMessage($('noteMessage'), response.message || t('note_review'), 'success');
          markLocallyVerified();
          textInput.value = ''; counter.textContent = copyText('note_counter', { count: 0 });
+          showToast(t('note_review'));
+          closeNoteSheet();
        } catch (error) { setMessage($('noteMessage'), error.message || t('note_send_error'), 'error'); }
        finally { resetTurnstile(); submit.disabled = false; submit.textContent = t('note_send'); }
       });
@@ -591,7 +697,7 @@
         const noteId = cardElement.dataset.noteId;
         const reportButton = event.target.closest('[data-report]');
          if (reportButton) {
-           if (!window.confirm(t('report_confirm'))) return;
+            if (!(await spotlightUI.confirm(t('report_confirm')))) return;
           reportButton.disabled = true;
           try {
             const reportResult = await getJSON(`/api/spotlight/notes/${encodeURIComponent(noteId)}/report`, { method: 'POST' });
@@ -604,6 +710,16 @@
            } catch (error) { showToast(error.message || t('report_failed')); reportButton.disabled = false; }
           return;
         }
+         const menuButton = event.target.closest('[data-report-menu]');
+         if (menuButton) {
+           const menu = cardElement.querySelector('.sp-report-menu');
+           const opening = menu.hidden;
+           notesList.querySelectorAll('.sp-report-menu').forEach((item) => { item.hidden = true; });
+           notesList.querySelectorAll('[data-report-menu]').forEach((item) => item.setAttribute('aria-expanded', 'false'));
+           menu.hidden = !opening;
+           menuButton.setAttribute('aria-expanded', String(opening));
+           return;
+         }
         const reactionButtonElement = event.target.closest('[data-reaction]');
         if (!reactionButtonElement || reactionButtonElement.disabled || reacting.has(noteId)) return;
         const kind = reactionButtonElement.dataset.reaction;
@@ -641,10 +757,12 @@
       navigator.share({ title: copyText('share_title', { name: student.name || t('student_fallback'), brand }), text: message }).catch(() => {});
       return;
     }
+    const previousFocus = document.activeElement;
     const host = $('shareDialogHost');
     host.replaceChildren();
     const overlay = make('div', 'sp-overlay');
-    overlay.addEventListener('click', (event) => { if (event.target === overlay) overlay.remove(); });
+    const closeOverlay = () => { overlay.remove(); previousFocus?.focus?.(); };
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeOverlay(); });
     const dialog = make('section', 'sp-dialog');
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'shareHeading');
     dialog.append(make('h2', '', t('share_dialog_title')));
@@ -657,14 +775,22 @@
     const copy = make('button', 'sp-btn sp-btn-secondary', t('copy_link'));
     copy.type = 'button';
     copy.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(link); showToast(t('link_copied')); overlay.remove(); }
+       try { await navigator.clipboard.writeText(link); showToast(t('link_copied')); closeOverlay(); }
       catch { showToast(t('copy_failed')); }
     });
     options.append(whatsapp, copy);
     dialog.append(options);
     const close = make('button', 'sp-quiet-link', t('share_close'));
-    close.type = 'button'; close.style.marginTop = '10px'; close.addEventListener('click', () => overlay.remove());
+    close.type = 'button'; close.style.marginTop = '10px'; close.addEventListener('click', closeOverlay);
     dialog.append(close); overlay.append(dialog); host.append(overlay);
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeOverlay(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialog.querySelectorAll('a[href],button:not([disabled])'));
+      if (!focusable.length) return;
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable[focusable.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) { event.preventDefault(); focusable[0].focus(); }
+    });
     close.focus();
   }
 
@@ -761,19 +887,22 @@
       }
       notes.forEach((note) => {
         const article = make('article', 'sp-admin-note');
+        const head = make('div', 'sp-admin-head');
         const meta = make('div', 'sp-admin-meta');
         const nameLine = make('div');
+        if (note.roll_number) head.append(makeAvatar(note));
          const name = make('b', '', note.name || t('student_fallback'));
         nameLine.append(name, document.createTextNode(` · ${note.roll_number || ''}`));
         meta.append(nameLine, make('div', '', `${campusLine(note)} · ${formatDate(note.created_at)}`));
          if (note.status) meta.append(make('div', '', `${copyText('status_label', { status: note.status })}${note.reported ? t('note_reported_suffix') : ''}`));
-        article.append(meta, make('div', 'sp-admin-text', note.text || ''));
+        head.append(meta);
+        article.append(head, make('div', 'sp-admin-text', note.text || ''));
         const actions = make('div', 'sp-admin-actions');
         const addAction = (label, action, style, confirmMessage) => {
           const button = make('button', `sp-btn ${style}`, label);
           button.type = 'button';
           button.addEventListener('click', async () => {
-            if (confirmMessage && !window.confirm(confirmMessage)) return;
+            if (confirmMessage && !(await spotlightUI.confirm(confirmMessage))) return;
             button.disabled = true;
             try {
               const result = await getJSON(`/api/spotlight/admin/notes/${encodeURIComponent(note.id)}/${action}`, { method: 'POST' });
@@ -834,12 +963,12 @@
       state.queue = { pending: [], reported: [] }; state.students = [];
       showLogin(t('signed_out'));
     });
-    $('adminTabs').addEventListener('click', (event) => {
+    $('adminTabs').addEventListener('click', async (event) => {
       const tab = event.target.closest('[data-admin-tab]');
       if (!tab) return;
       if (editor.isSaving()) return;
       if (state.tab === 'settings' && editor.hasDirty()) {
-        if (!window.confirm(t('settings_dirty_confirm'))) return;
+        if (!(await spotlightUI.confirm(t('settings_dirty_confirm')))) return;
         editor.discard();
       }
       state.tab = tab.dataset.adminTab;
@@ -883,6 +1012,7 @@
       spotlightTexts = response.texts || {};
       spotlightSettings = response.settings || {};
       applyStaticCopy();
+      spotlightUI.setupTheme();
       if (errorView) errorView.hidden = true;
       if (app && failedPageVisibility.size) {
         failedPageVisibility.forEach((wasHidden, node) => { node.hidden = wasHidden; });

@@ -19,6 +19,8 @@ API routes are mounted under `/api/chat/*` and `/api/reyi/*`. Ordinary posts/com
 
 Spotlight is independent and available all day at `/api/spotlight/*`; it does not use the Reyi night window. Its attendance-homepage link remains hidden until the user asks to enable it.
 
+Spotlight's students use it only on phones. Prioritize 360–430px layouts and touch interaction; desktop support is secondary. Keep visual redesigns separate from the backend APIs, stored records, authentication and abuse-prevention rules.
+
 ## Files and services
 
 - `server.js` — LF-encoded Express entry point; security headers, CORS allow-list, JSON errors, `/login` attendance scraping, and **only** `public/` static serving. Mounts both routers and initializes their schemas before listening.
