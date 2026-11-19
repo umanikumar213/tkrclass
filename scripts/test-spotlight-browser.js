@@ -35,6 +35,13 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     assert.equal(await page.locator('.sp-filter-label', { hasText: 'Section' }).count(), 0);
     await page.locator('#studentSearch').fill(first.toLowerCase());
     await page.waitForTimeout(350);
+    const countMirror = await context.newPage();
+    await countMirror.goto(`${base}/spotlight`);
+    await countMirror.locator('#studentSearch').fill(first);
+    const mirrorCard = countMirror.locator(`[data-student-roll="${first}"] [data-card-like-count]`);
+    await mirrorCard.waitFor();
+    assert.match(await mirrorCard.textContent(), / 1$/);
+    await countMirror.evaluate(() => { window.countMirrorMarker = true; });
     await page.locator('#studentGrid .sp-student').first().click();
     await page.locator('[data-like-button]').waitFor();
     assert.equal(await page.locator('.sp-profile-name').textContent(), 'Student <Unsafe & "Name">');
@@ -45,6 +52,29 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     assert.equal(await page.locator('#profileLikeCount').textContent(), '2');
     assert.match(await page.locator('[data-like-button]').textContent(), /💘 Liked · 2/);
     assert.ok(!(await page.locator('[data-like-button]').textContent()).includes('+1'));
+    const mirrorCount = async count => {
+      await countMirror.waitForFunction(({ roll, count }) =>
+        document.querySelector(`[data-student-roll="${roll}"] [data-card-like-count]`)?.textContent.endsWith(` ${count}`),
+      { roll: first, count });
+    };
+    await mirrorCount(2);
+    assert.equal(await countMirror.evaluate(() => window.countMirrorMarker), true, 'Card updates must not reload Discover');
+    assert.equal((await (await context.request.get(`${base}/api/spotlight/students?q=${first}`)).json()).students[0].like_count, 1, 'The server list remains cached while the card updates');
+    await countMirror.evaluate(roll => {
+      document.querySelector(`[data-student-roll="${roll}"] [data-card-like-count]`).textContent = '0';
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    }, first);
+    await mirrorCount(2);
+    await page.locator('[data-like-button]').click();
+    await page.waitForFunction(() => document.querySelector('[data-like-button]').getAttribute('aria-pressed') === 'false');
+    await mirrorCount(1);
+    await page.locator('[data-like-button]').click();
+    await page.waitForFunction(() => document.querySelector('[data-like-button]').getAttribute('aria-pressed') === 'true');
+    await mirrorCount(2);
+    await countMirror.reload();
+    await countMirror.locator('#studentSearch').fill(first);
+    await mirrorCount(2);
+    await countMirror.close();
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
     // A fresh private browsing context on the same network/device cannot add another like.
@@ -59,6 +89,7 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     await blocked;
     assert.equal(await privatePage.locator('#profileLikeCount').textContent(), '2');
     assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'true');
+    assert.equal(await privatePage.evaluate(() => localStorage.getItem('spotlight-like-counts')), null, 'Blocked likes must not publish count overrides');
     await privateContext.close();
     await page.locator('#openNoteComposer').click();
     await page.locator('#noteText').fill('A kind browser test note');
@@ -175,7 +206,9 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     await adminPage.locator('#adminLoginView:not([hidden])').waitFor();
     assert.equal(await adminPage.locator('#adminPassword').inputValue(), '');
     assert.equal(await adminPage.evaluate(() => sessionStorage.length), 0);
-    assert.ok(await adminPage.evaluate(() => Object.keys(localStorage).every(key => key === 'spotlight-reported-notes')));
+    assert.ok(await adminPage.evaluate(() => Object.keys(localStorage).every(key => ['spotlight-reported-notes', 'spotlight-like-counts'].includes(key))));
+    assert.ok(await adminPage.evaluate(() => Object.values(JSON.parse(localStorage.getItem('spotlight-like-counts') || '{}'))
+      .every(entry => Object.keys(entry).sort().join(',') === 'at,count')), 'Only public counts and freshness timestamps may be cached');
     assert.equal(await adminPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
     await context.close();

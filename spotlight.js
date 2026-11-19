@@ -50,6 +50,22 @@ function publicOrigin(req) {
 }
 router.get('/spotlight', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight.html')));
 router.get('/spotlight/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/spotlight-admin.html')));
+router.get('/leaderboard', (req, res) => res.redirect(301, '/spotlight/leaderboard'));
+router.get('/spotlight/leaderboard', (req, res) => {
+  const texts = req.spotlightContent.texts;
+  const origin = publicOrigin(req);
+  const tags = {
+    'og:title': texts.leaderboard_page_title,
+    'og:description': texts.leaderboard_subtitle,
+    'og:type': 'website',
+    'og:url': `${origin}/spotlight/leaderboard`,
+    'og:image': `${origin}/api/spotlight/og/SPOTLIGHT.jpg`,
+  };
+  const meta = Object.entries(tags).map(([key, value]) => `<meta property="${key}" content="${escapeHtml(value)}">`).join('\n');
+  const template = fs.readFileSync(path.join(__dirname, 'public/spotlight-leaderboard.html'), 'utf8');
+  res.type('html').send(template.replace('<!--SPOTLIGHT_META-->', meta)
+    .replace(/(<title\b[^>]*>)[\s\S]*?(<\/title>)/i, (_, open, close) => `${open}${escapeHtml(texts.leaderboard_page_title)}${close}`));
+});
 router.get('/spotlight/:roll', validateRoll, wrap(async (req, res) => {
   if (req.params.roll !== req.roll) return res.redirect(301, `/spotlight/${req.roll}`);
   const profile = hiddenRolls.has(req.roll) ? null : await publicProfile(req.roll);
@@ -228,7 +244,7 @@ router.post('/api/spotlight/students/:roll/like', validateRoll, identity,
     return { liked, like_count: rows[0].like_count };
   });
   if (payload.blocked) return res.status(409).json({ message: message(req, 'like_already'), liked: true, like_count: payload.like_count });
-  // Leaderboards intentionally keep their ten-minute cache; profile counts must be fresh.
+  // Lists/leaderboards retain their 60/120-second caches; profile counts must be fresh.
   clearProfile(req.roll);
   res.json(payload);
 }));

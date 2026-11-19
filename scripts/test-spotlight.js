@@ -90,18 +90,18 @@ async function main() {
           i === 1 ? 'CIVIL' : 'CSE', i === 1 ? null : 'A', '1st Year', i <= 2 ? photo : null]);
     }
     const releaseAssets = new Set();
-    for (const url of ['/spotlight', '/spotlight/admin', `/spotlight/${first}`]) {
+    for (const url of ['/spotlight', '/spotlight/leaderboard', '/spotlight/admin', `/spotlight/${first}`]) {
       const html = await request(url);
       assert.equal(html.status, 200);
       assert.equal(html.response.headers.get('cache-control'), 'no-store');
       assert.equal(html.response.headers.get('cdn-cache-control'), 'no-store');
-      assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor)?\.(?:js|css)"/);
+      assert.doesNotMatch(html.body, /(?:src|href)="\/spotlight(?:-ui|-editor|-counts)?\.(?:js|css)"/);
       assert.doesNotMatch(html.body, /\/spotlight-assets\//);
-      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor)?\.(?:css|js)\?v=[a-z0-9]+)"/g)];
+      const links = [...html.body.matchAll(/(?:src|href)="(\/spotlight(?:-ui|-editor|-counts)?\.(?:css|js)\?v=[a-z0-9]+)"/g)];
       assert.ok(links.length >= 3, 'Every Spotlight page must use version queries for CSS and scripts');
       for (const [, asset] of links) releaseAssets.add(asset);
     }
-    assert.equal(releaseAssets.size, 4, 'All four Spotlight assets share this release');
+    assert.equal(releaseAssets.size, 5, 'All five Spotlight assets share this release');
     assert.equal(new Set([...releaseAssets].map(url => new URL(url, base).searchParams.get('v'))).size, 1);
     for (const url of releaseAssets) {
       const asset = await request(url);
@@ -145,6 +145,7 @@ async function main() {
       network: ip(41), body: { changes: { brand_name: 'Not allowed' } },
     })).status, 401);
     const save = changes => post('/api/spotlight/admin/settings', { admin: true, body: { changes } });
+    await require('./test-spotlight-leaderboard').runLeaderboardChecks({ request, save, loader });
     assert.equal((await save({ brand_name: 'Campus <Friends>', random_profile_years: ['1st Year'] })).status, 200);
     assert.equal((await request('/api/spotlight/texts')).body.texts.brand_name, 'Campus <Friends>');
     assert.equal((await save({ does_not_exist: 'No' })).status, 400);
@@ -241,7 +242,9 @@ async function main() {
     await save({ like_device_check: null, leaderboard_size: 1 });
     assert.equal((await request('/api/spotlight/leaderboard?tab=liked')).body.students.length, 1);
     for (const tab of ['trending', 'liked', 'noted']) {
-      assert.ok((await request(`/api/spotlight/leaderboard?tab=${tab}`)).body.students.every(s => s.score > 0));
+      const students = (await request(`/api/spotlight/leaderboard?tab=${tab}`)).body.students;
+      assert.ok(students.length <= 1, 'Every tab must respect the configured leaderboard_size');
+      assert.ok(students.every(s => s.score > 0));
     }
     await save({ leaderboard_size: null });
     await save({ like_rate_per_hour: 1 });

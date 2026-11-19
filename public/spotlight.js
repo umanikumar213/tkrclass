@@ -122,6 +122,24 @@
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   };
+  const updateDirectoryCardCount = (card, value) => {
+    const count = card.querySelector('[data-card-like-count]');
+    if (count) count.textContent = `${t('like_emoji')} ${Number(value) || 0}`;
+  };
+  const setupRandomNavigation = () => {
+    const action = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const data = await getJSON('/api/spotlight/random');
+        if (!data.roll_number) throw new Error(t('random_missing'));
+        window.location.assign(profileLink(data.roll_number));
+      } catch (error) { showToast(error.message || t('random_error')); }
+      finally { button.disabled = false; }
+    };
+    $('randomProfile')?.addEventListener('click', action);
+    $('randomProfileBottom')?.addEventListener('click', () => $('randomProfile')?.click());
+  };
 
   let turnstileKey = null;
   let turnstileVerified = false;
@@ -256,11 +274,9 @@
     const more = $('loadMore');
     const filtersBox = $('filterSteps');
     const search = $('studentSearch');
-    const leaderBox = $('leaderboard');
-    const state = { years: [], courses: [], sections: [], year: '', course: '', section: '', query: '', page: 1, hasMore: false, loading: false, leader: 'trending' };
+    const state = { years: [], courses: [], sections: [], year: '', course: '', section: '', query: '', page: 1, hasMore: false, loading: false };
     let searchTimer;
     let listRequestId = 0;
-    let leaderRequestId = 0;
     let listObserver = null;
     let autoLoadBlocked = false;
     const renderFilters = () => {
@@ -271,7 +287,9 @@
       };
       const yearRow = make('div', 'sp-year-row');
       yearRow.setAttribute('role', 'group');
-      yearRow.setAttribute('aria-label', t('filter_year'));
+      yearRow.setAttribute('aria-label', t('filter_year_label'));
+      const yearFilter = make('div', 'sp-year-filter');
+      yearFilter.append(make('span', 'sp-filter-label', t('filter_year_label')), yearRow);
       const years = [...new Set(state.years)].sort((a, b) => yearRank(a) - yearRank(b) || String(a).localeCompare(String(b)));
       [{ value: '', rank: 0 }, ...[1, 2, 3, 4].map(rank => ({
         value: years.find(year => yearRank(year) === rank),
@@ -293,7 +311,7 @@
         });
         yearRow.append(button);
       });
-      filtersBox.append(yearRow);
+      filtersBox.append(yearFilter);
       const selectRow = make('div', 'sp-filter-selects');
       const makeSelect = (label, allLabel, options, value, onChange) => {
         const wrap = make('label', 'sp-filter-select-wrap');
@@ -344,10 +362,15 @@
       const copy = make('span', 'sp-student-copy');
       copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
       copy.append(make('span', 'sp-student-meta', campusLine(student)));
+      link.dataset.studentRoll = String(student.roll_number || '').toUpperCase();
       const counts = make('span', 'sp-card-counts');
-      counts.append(make('span', '', `${t('like_emoji')} ${Number(student.like_count) || 0}`), make('span', '', `${t('notes_label')} ${Number(student.note_count) || 0}`));
+      const likeCount = make('span', '', `${t('like_emoji')} ${Number(student.like_count) || 0}`);
+      likeCount.dataset.cardLikeCount = 'true';
+      counts.append(likeCount, make('span', '', `${t('notes_label')} ${Number(student.note_count) || 0}`));
       copy.append(counts);
       link.append(copy);
+      const authoritativeCount = window.spotlightCounts?.get(student.roll_number);
+      if (authoritativeCount !== null && authoritativeCount !== undefined) updateDirectoryCardCount(link, authoritativeCount);
       return link;
     };
     const renderSkeletons = () => {
@@ -428,58 +451,6 @@
         }
       }
     }
-    const renderLeaderState = (text, error = false) => {
-      leaderBox.replaceChildren();
-      const message = make('div', 'sp-state');
-      message.append(make('strong', '', error ? t('leader_load_error') : text));
-      if (error) {
-        message.append(make('span', '', text));
-        const retry = make('button', 'sp-btn sp-btn-secondary', t('try_again'));
-        retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', loadLeaderboard); message.append(retry);
-      }
-      leaderBox.append(message);
-    };
-    async function loadLeaderboard() {
-      const requestId = ++leaderRequestId;
-      leaderBox.replaceChildren(...Array.from({ length: 4 }, () => make('div', 'sp-skeleton')));
-      try {
-        const data = await getJSON(`/api/spotlight/leaderboard?tab=${encodeURIComponent(state.leader)}`);
-        if (requestId !== leaderRequestId) return;
-        const students = (Array.isArray(data.students) ? data.students : []).slice(0, Number(spotlightSettings.leaderboard_size));
-        leaderBox.replaceChildren();
-        if (!students.length) { renderLeaderState(t('leader_empty')); return; }
-        const itemValue = (student) => Number(state.leader === 'trending' ? student.score : (state.leader === 'liked' ? student.like_count : student.note_count)) || 0;
-        const podium = make('div', 'sp-podium');
-        students.slice(0, 3).forEach((student, index) => {
-          const card = make('a', 'sp-podium-card');
-          card.href = profileLink(student.roll_number);
-          card.style.setProperty('--rank-color', ['var(--gold)', 'var(--silver)', 'var(--bronze)'][index]);
-          card.append(make('span', 'sp-podium-rank', copyText('leader_rank', { rank: index + 1 })), makeAvatar(student, false, 48));
-          card.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
-          card.append(make('span', 'sp-student-meta', campusLine(student)));
-          const podiumCount = make('span', 'sp-leader-count', String(itemValue(student)));
-          podiumCount.append(make('small', '', state.leader === 'trending' ? t('leader_unit_trending') : state.leader === 'liked' ? t('leader_unit_liked') : t('leader_unit_noted')));
-          card.append(podiumCount);
-          podium.append(card);
-        });
-        leaderBox.append(podium);
-        students.slice(3).forEach((student, index) => {
-          const link = make('a', 'sp-leader');
-          link.href = profileLink(student.roll_number);
-          link.append(make('span', 'sp-leader-rank', String(index + 4)));
-          link.append(makeAvatar(student, false, 48));
-          const copy = make('span', 'sp-leader-copy');
-          copy.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
-          copy.append(make('span', 'sp-student-meta', campusLine(student)));
-          link.append(copy);
-          const value = itemValue(student);
-          const count = make('span', 'sp-leader-count', String(value));
-          count.append(make('small', '', state.leader === 'trending' ? t('leader_unit_trending') : state.leader === 'liked' ? t('leader_unit_liked') : t('leader_unit_noted')));
-          link.append(count);
-          leaderBox.append(link);
-        });
-      } catch (error) { if (requestId === leaderRequestId) renderLeaderState(error.message || t('please_try_again'), true); }
-    }
     try {
       const filters = await getJSON('/api/spotlight/filters');
       state.years = Array.isArray(filters.years) ? filters.years : [];
@@ -493,7 +464,6 @@
       filtersBox.append(warning);
     }
     await loadStudents();
-    loadLeaderboard();
     const clearSearch = $('clearStudentSearch');
     const syncClear = () => { clearSearch.hidden = !search.value; };
     clearSearch.addEventListener('click', () => {
@@ -514,18 +484,8 @@
       if (!autoLoadBlocked) state.page += 1;
       loadStudents(true);
     });
-    const randomAction = async (event) => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      try {
-        const data = await getJSON('/api/spotlight/random');
-        if (!data.roll_number) throw new Error(t('random_missing'));
-        window.location.assign(profileLink(data.roll_number));
-      } catch (error) { showToast(error.message || t('random_error')); }
-      finally { button.disabled = false; }
-    };
-    $('randomProfile').addEventListener('click', randomAction);
-    $('randomProfileBottom').addEventListener('click', () => $('randomProfile').click());
+    setupRandomNavigation();
+    $('randomProfileHero').addEventListener('click', () => $('randomProfile')?.click());
     if ('IntersectionObserver' in window) {
       listObserver = new IntersectionObserver((entries) => {
         if (entries.some((entry) => entry.isIntersecting) && state.hasMore && !state.loading && !autoLoadBlocked) {
@@ -535,14 +495,120 @@
       }, { rootMargin: '240px' });
       listObserver.observe(more);
     }
+    const refreshVisibleCounts = () => {
+      document.querySelectorAll('[data-student-roll]').forEach((card) => {
+        const count = window.spotlightCounts?.get(card.dataset.studentRoll);
+        if (count !== null && count !== undefined) updateDirectoryCardCount(card, count);
+      });
+    };
+    window.addEventListener('spotlight:like-count', refreshVisibleCounts);
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'spotlight-like-counts') refreshVisibleCounts();
+    });
+    window.addEventListener('pageshow', refreshVisibleCounts);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshVisibleCounts(); });
+  }
+
+  async function startLeaderboard() {
+    const box = $('leaderboard');
+    const header = document.querySelector('.sp-topbar');
+    const syncStickyHeader = () => document.documentElement.style.setProperty('--leader-sticky-top', `${header.getBoundingClientRect().height}px`);
+    syncStickyHeader();
+    if ('ResizeObserver' in window) new ResizeObserver(syncStickyHeader).observe(header);
+    else window.addEventListener('resize', syncStickyHeader);
+    const allowedTabs = ['trending', 'liked', 'noted'];
+    const state = { tab: allowedTabs.includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'trending', requestId: 0 };
+    const syncTabs = () => document.querySelectorAll('[data-leader-tab]').forEach((button) => {
+      button.setAttribute('aria-selected', String(button.dataset.leaderTab === state.tab));
+    });
+    const setUrlTab = (tab, replace = false) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history[replace ? 'replaceState' : 'pushState']({ spotlightTab: tab }, '', url);
+    };
+    const showState = (message, error = false) => {
+      box.replaceChildren();
+      const stateBox = make('div', 'sp-state');
+      stateBox.append(make('strong', '', error ? t('leader_load_error') : message));
+      if (error) {
+        stateBox.append(make('span', '', message));
+        const retry = make('button', 'sp-btn sp-btn-secondary', t('try_again'));
+        retry.type = 'button'; retry.style.marginTop = '12px'; retry.addEventListener('click', loadLeaderboard);
+        stateBox.append(retry);
+      }
+      box.append(stateBox);
+    };
+    const unitLabel = () => t(state.tab === 'trending' ? 'leader_unit_trending' : state.tab === 'liked' ? 'leader_unit_liked' : 'leader_unit_noted');
+    const valueFor = (student) => Number(state.tab === 'trending' ? student.score : state.tab === 'liked' ? student.like_count : student.note_count) || 0;
+    const appendStudentName = (node, student) => {
+      node.append(make('span', 'sp-student-name', student.name || t('student_fallback')));
+      node.append(make('span', 'sp-student-meta', campusLine(student)));
+    };
+    async function loadLeaderboard() {
+      const requestId = ++state.requestId;
+      box.replaceChildren(...Array.from({ length: 4 }, () => make('div', 'sp-skeleton')));
+      try {
+        const result = await getJSON(`/api/spotlight/leaderboard?tab=${encodeURIComponent(state.tab)}`);
+        if (requestId !== state.requestId) return;
+        const limit = Number(spotlightSettings.leaderboard_size);
+        const students = (Array.isArray(result.students) ? result.students : []).slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
+        box.replaceChildren();
+        if (!students.length) { showState(t('leader_empty')); return; }
+        const podium = make('div', 'sp-podium');
+        const podiumOrder = [1, 0, 2].filter((index) => students[index]);
+        podiumOrder.forEach((studentIndex) => {
+          const student = students[studentIndex];
+          const rank = studentIndex + 1;
+          const card = make('a', `sp-podium-card sp-podium-rank-${rank}`);
+          card.href = profileLink(student.roll_number);
+          card.style.setProperty('--rank-color', rank === 1 ? 'var(--gold)' : rank === 2 ? 'var(--silver)' : 'var(--bronze)');
+          card.append(make('span', 'sp-podium-rank', copyText('leader_rank', { rank })), makeAvatar(student, false, 48));
+          appendStudentName(card, student);
+          const count = make('span', 'sp-leader-count', String(valueFor(student)));
+          count.append(make('small', '', unitLabel()));
+          card.append(count);
+          podium.append(card);
+        });
+        box.append(podium);
+        students.slice(3).forEach((student, index) => {
+          const row = make('a', 'sp-leader');
+          row.href = profileLink(student.roll_number);
+          row.append(make('span', 'sp-leader-rank', String(index + 4)), makeAvatar(student, false, 48));
+          const copy = make('span', 'sp-leader-copy');
+          appendStudentName(copy, student);
+          row.append(copy);
+          const count = make('span', 'sp-leader-count', String(valueFor(student)));
+          count.append(make('small', '', unitLabel()));
+          row.append(count);
+          box.append(row);
+        });
+      } catch (error) {
+        if (requestId === state.requestId) showState(error.message || t('please_try_again'), true);
+      }
+    }
     document.querySelectorAll('[data-leader-tab]').forEach((button) => button.addEventListener('click', () => {
-      state.leader = button.dataset.leaderTab;
-      document.querySelectorAll('[data-leader-tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab === button)));
+      const tab = button.dataset.leaderTab;
+      if (!allowedTabs.includes(tab) || state.tab === tab) return;
+      state.tab = tab;
+      syncTabs();
+      setUrlTab(tab);
       loadLeaderboard();
     }));
+    window.addEventListener('popstate', () => {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      state.tab = allowedTabs.includes(tab) ? tab : 'trending';
+      syncTabs();
+      loadLeaderboard();
+    });
+    document.title = t('leaderboard_page_title') || t('leaderboard_title');
+    syncTabs();
+    if (new URLSearchParams(window.location.search).get('tab') !== state.tab) setUrlTab(state.tab, true);
+    setupRandomNavigation();
+    loadLeaderboard();
   }
 
   async function startProfile() {
+    setupRandomNavigation();
     const match = window.location.pathname.match(/\/spotlight\/([^/]+)\/?$/);
     const roll = match ? decodeURIComponent(match[1]).toUpperCase() : '';
     const view = $('profileView');
@@ -670,6 +736,7 @@
           const updated = await getJSON(`/api/spotlight/students/${encodeURIComponent(roll)}/like`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           data.likedByMe = Boolean(updated.liked);
           studentData.like_count = updated.like_count;
+          window.spotlightCounts?.publish(roll, updated.like_count);
           like.classList.toggle('is-liked', data.likedByMe);
           like.setAttribute('aria-pressed', String(data.likedByMe));
            likeLabel.textContent = copyText('like_count_format', { emoji: t('like_emoji'), label: data.likedByMe ? t('liked_label') : t('like_label'), count: Number(updated.like_count) || 0 });
@@ -1165,6 +1232,7 @@
       }
       const page = document.body.dataset.spotlightPage;
       if (page === 'directory') startDirectory();
+      if (page === 'leaderboard') startLeaderboard();
       if (page === 'profile') startProfile();
       if (page === 'admin') startAdmin();
     } catch (error) {

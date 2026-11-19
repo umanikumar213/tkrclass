@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!--SPOTLIGHT_META-->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f3fa">
+  <title data-sp-text="leaderboard_page_title">Campus Leaderboard · TKR Spotlight</title>
+  <link rel="stylesheet" href="/spotlight.css?v=20261119d">
+  <script defer src="/spotlight-ui.js?v=20261119d"></script>
+  <script defer src="/spotlight.js?v=20261119d"></script>
+</head>
+<body data-spotlight-page="leaderboard">
+  <main class="sp-shell" id="app">
+    <section id="spotlightTextsError" class="sp-state" hidden><strong data-sp-text="texts_load_error">Spotlight content could not load. Check your connection and retry.</strong><button id="spotlightTextsRetry" type="button" class="sp-btn sp-btn-secondary" data-sp-text="texts_retry">Retry loading Spotlight</button></section>
+    <header class="sp-topbar">
+      <a class="sp-brand" href="/spotlight" aria-label="TKR Spotlight home" data-sp-aria="home_aria">
+        <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
+        <span><span class="sp-brand-name" data-sp-text="brand_name">TKR Spotlight</span><span class="sp-brand-sub" data-sp-text="tagline">A little appreciation goes far</span></span>
+      </a>
+      <nav class="sp-desktop-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+        <a class="sp-quiet-link" href="/spotlight" data-sp-text="discover_link">Discover</a>
+        <a class="sp-quiet-link is-current" href="/spotlight/leaderboard" aria-current="page" data-sp-text="leaderboard_short">Leaderboard</a>
+        <button class="sp-quiet-link sp-nav-random" type="button" id="randomProfile"><span data-sp-text="random_nav_label">Random</span></button>
+        <a class="sp-quiet-link" href="/" data-sp-text="attendance_link">Attendance</a>
+      </nav>
+    </header>
+    <section class="sp-leader-page">
+      <div class="sp-section-head sp-leader-page-heading">
+        <div><h1 class="sp-title" data-sp-text="leaderboard_title">Campus Leaderboard</h1><p class="sp-intro" data-sp-text="leaderboard_subtitle">A small snapshot of the kind things happening here.</p></div>
+      </div>
+      <div class="sp-tabs sp-leader-tabs" role="tablist" aria-label="Campus appreciation" data-sp-aria="leaderboard_aria">
+        <button class="sp-tab" type="button" role="tab" aria-selected="true" data-leader-tab="trending"><span data-sp-text="leader_tab_trending_emoji">🔥</span> <span data-sp-text="leader_tab_trending">Trending</span></button>
+        <button class="sp-tab" type="button" role="tab" aria-selected="false" data-leader-tab="liked"><span data-sp-text="leader_tab_liked_emoji">💘</span> <span data-sp-text="leader_tab_liked">Most liked</span></button>
+        <button class="sp-tab" type="button" role="tab" aria-selected="false" data-leader-tab="noted"><span data-sp-text="leader_tab_noted_emoji">💌</span> <span data-sp-text="leader_tab_noted">Most noted</span></button>
+      </div>
+      <div id="leaderboard" class="sp-list sp-leader-page-list" aria-live="polite"></div>
+    </section>
+    <footer class="sp-footer" data-sp-text="footer_about">A student appreciation space for TKR College of Engineering &amp; Technology.</footer>
+    <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+    <nav class="sp-bottom-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+      <a href="/spotlight"><span class="nav-icon" aria-hidden="true"></span><span data-sp-text="discover_link">Discover</span></a>
+      <a class="is-current" href="/spotlight/leaderboard" aria-current="page"><span class="nav-icon nav-leader" aria-hidden="true"></span><span data-sp-text="leaderboard_short">Leaderboard</span></a>
+      <button type="button" id="randomProfileBottom"><span data-sp-text="random_emoji">🎲</span><span data-sp-text="random_nav_label">Random</span></button>
+      <a href="/"><span class="nav-icon nav-home" aria-hidden="true"></span><span data-sp-text="attendance_link">Attendance</span></a>
+    </nav>
+  </main>
+</body>
+</html>

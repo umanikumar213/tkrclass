@@ -10,8 +10,8 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
   for (const [suffix, year, section] of [['04', '4th Year', 'A'], ['05', '3rd Year', 'A'], ['06', '2nd Year', 'A'], ['07', '4th Year', 'B']]) {
     await db.query('UPDATE spotlight_students SET year=$2,section=$3 WHERE roll_number=$1', [`26K91A01${suffix}`, year, section]);
   }
-  // Enough positive scores to exercise both the podium and the remaining ranked list.
-  for (let i = 4; i <= 8; i++) {
+  // More positive students than the size cap exercise the podium, list and real sticky scrolling.
+  for (let i = 4; i <= 25; i++) {
     const roll = `26K91A01${String(i).padStart(2, '0')}`;
     await db.query(
       `INSERT INTO spotlight_likes(roll_number,voter_hash,ip_hash)
@@ -69,11 +69,10 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`${base}/spotlight`);
         await page.locator('#studentGrid .sp-student').first().waitFor();
-        await page.locator('#leaderboard a').first().waitFor();
+        assert.equal(await page.locator('#leaderboard').count(), 0);
         await checkPage(page, `Discover ${width} ${theme}`);
         assert.equal(await page.locator('#studentGrid').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), width < 768 ? 1 : width < 1100 ? 2 : 3);
-        // The leaderboard precedes the directory in the actual document, not just visually.
-        assert.equal(await page.evaluate(() => Boolean(document.querySelector('#leaderboard').compareDocumentPosition(document.querySelector('#studentGrid')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+        await require('./test-spotlight-leaderboard-browser').checkPublicNavigation(page, 'directory');
         await screenshot(page, `discover-${width}-${theme}`);
         await page.locator('#studentGrid .sp-student').first().scrollIntoViewIfNeeded();
         const card = page.locator('#studentGrid .sp-student').first();
@@ -108,9 +107,11 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         }
         await checkFilters(page);
 
+        await require('./test-spotlight-leaderboard-browser').checkLeaderboardPage({ page, base, checkPage, screenshot, label: `${width}-${theme}` });
         await page.goto(`${base}/spotlight/${first}`);
         await page.locator('[data-like-button]').waitFor();
         await checkPage(page, `Profile ${width} ${theme}`);
+        await require('./test-spotlight-leaderboard-browser').checkPublicNavigation(page, 'profile');
         assert.equal(await page.locator('.sp-profile-backdrop img').count(), 0, 'Profile photo must not be used as a stretched backdrop');
         await screenshot(page, `profile-${width}-${theme}`);
         await page.locator('#openNoteComposer').click();
@@ -127,6 +128,7 @@ async function runLayoutChecks({ browser, base, first, db, loader }) {
         await page.locator('#adminLoginButton').click();
         await page.locator('#adminView:not([hidden])').waitFor();
         await checkPage(page, `Admin ${width} ${theme}`);
+        assert.equal(await page.locator('.sp-bottom-nav').count(), 0, 'Public navigation must not appear in admin');
         await screenshot(page, `admin-${width}-${theme}`);
         const reject = page.locator('.sp-admin-note button', { hasText: 'Reject' }).first();
         await reject.click();
@@ -162,6 +164,12 @@ async function checkFilters(page) {
   const row = page.locator('.sp-year-row');
   assert.equal(await row.locator('button').count(), 5, 'All four data years must be available');
   assert.equal(await row.evaluate(node => node.scrollWidth <= node.clientWidth), true, 'Year control must never scroll horizontally');
+  const width = page.viewportSize().width;
+  assert.equal(await page.locator('.sp-year-filter > .sp-filter-label').textContent(), 'YEAR');
+  const labels = await row.locator('button').evaluateAll(nodes => nodes.map(node => node.innerText.trim()));
+  assert.deepEqual(labels, width <= 400 ? ['All', '1st yr', '2nd yr', '3rd yr', '4th yr'] : ['All', '1st Year', '2nd Year', '3rd Year', '4th Year']);
+  const tops = await row.locator('button').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().top));
+  assert.equal(new Set(tops).size, 1, 'All five year buttons must be on one line');
   const fourth = row.locator('button').filter({ hasText: /4th/ });
   assert.equal(await fourth.isVisible(), true);
   const fourthBox = await fourth.boundingBox();

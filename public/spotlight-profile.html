@@ -6,9 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4f3fa">
   <title data-sp-text="directory_page_title">TKR Spotlight</title>
-  <link rel="stylesheet" href="/spotlight.css?v=20261119c">
-  <script defer src="/spotlight-ui.js?v=20261119c"></script>
-  <script defer src="/spotlight.js?v=20261119c"></script>
+  <link rel="stylesheet" href="/spotlight.css?v=20261119d">
+  <script defer src="/spotlight-ui.js?v=20261119d"></script>
+  <script defer src="/spotlight-counts.js?v=20261119d"></script>
+  <script defer src="/spotlight.js?v=20261119d"></script>
 </head>
 <body data-spotlight-page="profile">
   <main class="sp-shell sp-narrow" id="app">
@@ -18,7 +19,12 @@
         <span class="sp-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 14.3 9l6.2.5-4.7 4 1.5 6-5.3-3.3-5.3 3.3 1.5-6-4.7-4L9.7 9 12 3.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.1" r="2.2" fill="currentColor"/></svg></span>
         <span><span class="sp-brand-name" data-sp-text="brand_name">TKR Spotlight</span><span class="sp-brand-sub" data-sp-text="tagline">A little appreciation goes far</span></span>
       </a>
-       <div class="sp-header-actions"><a class="sp-back" href="/spotlight"><span aria-hidden="true" data-sp-text="back_arrow">←</span> <span data-sp-text="discover_link">Discover</span></a></div>
+       <nav class="sp-desktop-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+         <a class="sp-quiet-link is-current" href="/spotlight" aria-current="page" data-sp-text="discover_link">Discover</a>
+         <a class="sp-quiet-link" href="/spotlight/leaderboard" data-sp-text="leaderboard_short">Leaderboard</a>
+         <button class="sp-quiet-link sp-nav-random" type="button" id="randomProfile"><span data-sp-text="random_nav_label">Random</span></button>
+         <a class="sp-quiet-link" href="/" data-sp-text="attendance_link">Attendance</a>
+       </nav>
     </header>
     <div id="profileView" aria-live="polite">
       <div class="sp-skeleton" style="height:210px"></div>
@@ -53,6 +59,12 @@
       </div>
     </dialog>
     <div id="toast" class="sp-toast" role="status" aria-live="polite"></div>
+     <nav class="sp-bottom-nav" aria-label="Spotlight navigation" data-sp-aria="spotlight_nav_aria">
+       <a class="is-current" href="/spotlight" aria-current="page"><span class="nav-icon" aria-hidden="true"></span><span data-sp-text="discover_link">Discover</span></a>
+       <a href="/spotlight/leaderboard"><span class="nav-icon nav-leader" aria-hidden="true"></span><span data-sp-text="leaderboard_short">Leaderboard</span></a>
+       <button type="button" id="randomProfileBottom"><span data-sp-text="random_emoji">🎲</span><span data-sp-text="random_nav_label">Random</span></button>
+       <a href="/"><span class="nav-icon nav-home" aria-hidden="true"></span><span data-sp-text="attendance_link">Attendance</span></a>
+     </nav>
      <dialog id="spotlightConfirmDialog" class="sp-confirm-dialog" aria-labelledby="confirmDialogTitle">
        <div class="sp-confirm-content"><h2 id="confirmDialogTitle" data-sp-text="confirm_title">One quick check</h2><p id="confirmDialogMessage"></p><div class="sp-confirm-actions"><button type="button" class="sp-btn sp-btn-secondary" data-confirm-cancel data-sp-text="confirm_cancel">Cancel</button><button type="button" class="sp-btn sp-btn-danger" data-confirm-accept data-sp-text="confirm_accept">Continue</button></div></div>
      </dialog>
