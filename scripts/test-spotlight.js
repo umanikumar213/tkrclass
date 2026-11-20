@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const vm = require('node:vm');
 const { Pool } = require('pg');
 const express = require('express');
 const sharp = require('sharp');
@@ -11,6 +12,29 @@ const XLSX = require('xlsx');
 const { createTestLoader } = require('./security-test-loader');
 
 async function main() {
+  // Exercise the real browser hash function, not a separate reimplementation.
+  const source = fs.readFileSync(path.resolve(__dirname, '../public/spotlight.js'), 'utf8');
+  const hashFunction = source.slice(source.indexOf('const getDeviceHash = async () => {') + 'const getDeviceHash = '.length,
+    source.indexOf('  const markLocallyVerified')).trim().replace(/;$/, '');
+  const screenSignals = { width: 390, height: 844, availWidth: 390, availHeight: 800, colorDepth: 24 };
+  const navigatorSignals = { userAgent: 'Test phone', language: 'en', platform: 'Test', hardwareConcurrency: 8, deviceMemory: 4, maxTouchPoints: 5 };
+  const localeSignals = { timeZone: 'Asia/Kolkata', calendar: 'gregory', numberingSystem: 'latn' };
+  const browserHash = vm.runInNewContext(`(${hashFunction})`, {
+    TextEncoder,
+    window: { crypto: crypto.webcrypto, TextEncoder, devicePixelRatio: 3 },
+    navigator: navigatorSignals, screen: screenSignals,
+    Intl: { DateTimeFormat: () => ({ resolvedOptions: () => localeSignals }) },
+  });
+  const baselineHash = await browserHash();
+  assert.match(baselineHash, /^[a-f0-9]{64}$/);
+  for (const [signals, key] of [[screenSignals,'availWidth'],[screenSignals,'availHeight'],[screenSignals,'colorDepth'],
+    [navigatorSignals,'deviceMemory'],[navigatorSignals,'maxTouchPoints'],[localeSignals,'calendar'],[localeSignals,'numberingSystem']]) {
+    const original = signals[key];
+    signals[key] = typeof original === 'number' ? original + 1 : `${original}-different`;
+    assert.notEqual(await browserHash(), baselineHash, `${key} must affect the browser SHA-256 hash`);
+    signals[key] = original;
+  }
+  console.log('PASS: all seven additional device signals affect the real browser SHA-256 digest.');
   const schema = `spotlight_test_${process.pid}_${Date.now()}`;
   const options = {
     connectionString: process.env.DATABASE_URL,
@@ -137,7 +161,14 @@ async function main() {
     // Default random eligibility excludes every first-year test profile.
     assert.equal((await request('/api/spotlight/random')).status, 404);
     const contentBefore = (await request('/api/spotlight/texts')).body;
-    assert.equal(contentBefore.settings.like_max_per_ip_per_profile, 1);
+    assert.equal(Object.hasOwn(contentBefore.settings, 'like_max_per_ip_per_profile'), false);
+    // Legacy overrides must remain stored but be ignored by public/admin catalogues.
+    await db.query("INSERT INTO spotlight_settings(key,value) VALUES('like_max_per_ip_per_profile','1')");
+    loader.load('lib/spotlight-settings.js').clearContent();
+    const adminContent = (await request('/api/spotlight/admin/settings', { admin: true })).body;
+    assert.ok(!adminContent.fields.some(field => field.key.includes('like_max_per_ip_per_profile')));
+    assert.ok(!adminContent.fields.some(field => field.key === 'like_already'));
+    assert.ok(adminContent.fields.some(field => field.key === 'like_blocked_device'));
     assert.equal(contentBefore.settings.like_device_check, true);
     assert.equal(contentBefore.settings.like_rate_per_hour, 30);
     assert.equal((await request('/api/spotlight/admin/settings', { network: ip(40) })).status, 401);
@@ -207,38 +238,51 @@ async function main() {
     assert.equal((await request(`/api/spotlight/students/${first}`, { network: ip(2) })).body.likedByMe, false);
     result = await post(`/api/spotlight/students/${first}/like`, { cookie: visitor });
     assert.deepEqual(result.body, { liked: false, like_count: 0 });
-    // New cookies cannot bypass lifetime IP or hashed-device checks.
+    // Display ownership is strictly cookie-based; shared networks alone never block.
     assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: visitor })).body.like_count, 1);
-    const repeatIp = await post(`/api/spotlight/students/${first}/like`, { body: { device_hash: device('different-device') } });
-    assert.equal(repeatIp.status, 409);
+    const peer = await request(`/api/spotlight/students/${first}?device_hash=${device('different-device')}`);
+    assert.equal(peer.body.likedByMe, false);
+    const repeatIp = await post(`/api/spotlight/students/${first}/like`, { cookie: peer.cookie, body: { device_hash: device('different-device') } });
+    assert.equal(repeatIp.status, 200);
     assert.equal(repeatIp.body.liked, true);
-    assert.equal(repeatIp.body.like_count, 1);
-    assert.equal(repeatIp.body.message, contentBefore.texts.like_already);
-    await db.query("UPDATE spotlight_likes SET created_at=NOW()-INTERVAL '30 days' WHERE roll_number=$1", [first]);
-    assert.equal((await post(`/api/spotlight/students/${first}/like`)).status, 409);
+    const blocked = await post(`/api/spotlight/students/${first}/like`);
+    assert.equal(blocked.status, 409);
+    assert.notEqual(blocked.body.liked, true);
+    assert.equal(blocked.body.message, contentBefore.texts.like_blocked_device);
+    await save({ like_blocked_device: 'Custom duplicate-phone message' });
+    assert.equal((await post(`/api/spotlight/students/${first}/like`)).body.message, 'Custom duplicate-phone message');
+    await save({ like_blocked_device: null });
+    assert.equal((await request(`/api/spotlight/students/${first}?device_hash=${device(ip(1))}`, { cookie: blocked.cookie })).body.likedByMe, false);
     const repeatDevice = await post(`/api/spotlight/students/${first}/like`, {
       network: ip(2), body: { device_hash: device(ip(1)) },
     });
-    assert.equal(repeatDevice.status, 409);
-    assert.equal((await request(`/api/spotlight/students/${first}?device_hash=${device(ip(1))}`, { network: ip(2) })).body.likedByMe, true);
-    const storedDevice = (await db.query('SELECT device_hash FROM spotlight_likes WHERE roll_number=$1', [first])).rows[0].device_hash;
+    assert.equal(repeatDevice.status, 200, 'A device alone on another IP must not block');
+    assert.equal((await request(`/api/spotlight/students/${first}`, { cookie: repeatDevice.cookie, network: ip(2) })).body.likedByMe, true);
+    assert.equal((await request(`/api/spotlight/students/${first}?device_hash=${device(ip(1))}`, { network: ip(2) })).body.likedByMe, false);
+    const storedDevice = (await db.query('SELECT device_hash FROM spotlight_likes WHERE roll_number=$1 ORDER BY created_at LIMIT 1', [first])).rows[0].device_hash;
     assert.equal(storedDevice, crypto.createHmac('sha256', loader.env.SESSION_SECRET).update(device(ip(1))).digest('hex'));
     assert.notEqual(storedDevice, device(ip(1)));
-    assert.equal((await post(`/api/spotlight/students/${first}/like`, { network: ip(2), body: { device_hash: null } })).status, 400);
-    // Increasing the IP setting allows multiple devices, but the device check still applies.
-    await save({ like_max_per_ip_per_profile: 2 });
-    const extra = await post(`/api/spotlight/students/${first}/like`, { body: { device_hash: device('different-device') } });
-    assert.equal(extra.status, 200);
-    assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: extra.cookie })).body.liked, false);
-    await save({ like_max_per_ip_per_profile: null });
-    // Parallel identities cannot exceed the same-IP per-profile ceiling.
+    const classmates = await Promise.all(Array.from({ length: 20 }, (_, i) =>
+      post(`/api/spotlight/students/${first}/like`, { network: ip(210), body: { device_hash: device(`classmate-${i}`) } })));
+    assert.ok(classmates.every(row => row.status === 200 && row.body.liked));
+    assert.equal((await db.query('SELECT like_count FROM spotlight_students WHERE roll_number=$1', [first])).rows[0].like_count, 23);
+    for (const row of classmates) {
+      assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: row.cookie, network: ip(211) })).body.liked, false);
+    }
+    const withoutDevice = await post(`/api/spotlight/students/${first}/like`, { network: ip(212), body: { device_hash: null } });
+    assert.equal(withoutDevice.status, 200, 'No duplicate-device rule applies when no hash was sent');
+    await post(`/api/spotlight/students/${first}/like`, { network: ip(212), cookie: withoutDevice.cookie });
+    assert.equal((await post(`/api/spotlight/students/${first}/like`, { cookie: peer.cookie })).body.liked, false);
+    assert.equal((await post(`/api/spotlight/students/${first}/like`, { network: ip(2), cookie: repeatDevice.cookie })).body.liked, false);
+    assert.equal((await db.query("SELECT value FROM spotlight_settings WHERE key='like_max_per_ip_per_profile'")).rows[0].value, '1');
+    // Parallel identities with the same IP AND device are still serialized.
     const parallel = await Promise.all(Array.from({ length: 4 }, () =>
       post(`/api/spotlight/students/${second}/like`, { network: ip(3) })));
     assert.equal(parallel.filter(r => r.status === 200).length, 1);
     assert.equal(parallel.filter(r => r.status === 409).length, 3);
     assert.equal((await db.query('SELECT like_count FROM spotlight_students WHERE roll_number=$1', [second])).rows[0].like_count, 1);
     await save({ like_device_check: false });
-    assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(21), body: { device_hash: device(ip(3)) } })).status, 200);
+    assert.equal((await post(`/api/spotlight/students/${second}/like`, { network: ip(3), body: { device_hash: device(ip(3)) } })).status, 200);
     await save({ like_device_check: null, leaderboard_size: 1 });
     assert.equal((await request('/api/spotlight/leaderboard?tab=liked')).body.students.length, 1);
     for (const tab of ['trending', 'liked', 'noted']) {

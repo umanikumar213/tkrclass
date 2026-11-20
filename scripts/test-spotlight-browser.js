@@ -81,18 +81,43 @@ async function runBrowserChecks({ base, first, noPhoto, db, loader }) {
     await countMirror.close();
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
+    // A stale owner view must also reset to Like if the next request is blocked.
+    await page.route(`**/api/spotlight/students/${first}/like`, route => route.fulfill({
+      status: 409, contentType: 'application/json',
+      body: JSON.stringify({ liked: true, like_count: 999, message: 'Looks like a like from this phone already counted 💘' }),
+    }));
+    await page.locator('[data-like-button]').click();
+    await page.waitForFunction(() => !document.querySelector('[data-like-button]').disabled);
+    assert.equal(await page.locator('[data-like-button]').getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.locator('#profileLikeCount').textContent(), '2');
+    await page.unroute(`**/api/spotlight/students/${first}/like`);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
     // A fresh private browsing context on the same network/device cannot add another like.
     const privateContext = await browser.newContext({
       viewport: { width: 390, height: 844 }, extraHTTPHeaders: { 'x-forwarded-for': browserNetwork },
     });
     const privatePage = await privateContext.newPage();
     await privatePage.goto(`${base}/spotlight/${first}`);
-    await privatePage.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'true');
+    await privatePage.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'false');
     const blocked = privatePage.waitForResponse(r => r.url().endsWith('/like') && r.status() === 409);
     await privatePage.locator('[data-like-button]').click();
     await blocked;
     assert.equal(await privatePage.locator('#profileLikeCount').textContent(), '2');
-    assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'true');
+    await privatePage.locator('#toast.show', { hasText: 'Looks like a like from this phone already counted 💘' }).waitFor();
+    assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'false');
+    // Even an older/misleading 409 payload claiming liked=true must never set UI ownership.
+    await privatePage.route(`**/api/spotlight/students/${first}/like`, route => route.fulfill({
+      status: 409, contentType: 'application/json',
+      body: JSON.stringify({ liked: true, like_count: 999, message: 'Looks like a like from this phone already counted 💘' }),
+    }));
+    await privatePage.locator('[data-like-button]').click();
+    await privatePage.waitForFunction(() => !document.querySelector('[data-like-button]').disabled);
+    assert.equal(await privatePage.locator('[data-like-button]').getAttribute('aria-pressed'), 'false');
+    assert.equal(await privatePage.locator('#profileLikeCount').textContent(), '2');
+    await privatePage.unroute(`**/api/spotlight/students/${first}/like`);
+    await privatePage.reload();
+    await privatePage.waitForFunction(() => document.querySelector('[data-like-button]')?.getAttribute('aria-pressed') === 'false');
     assert.equal(await privatePage.evaluate(() => localStorage.getItem('spotlight-like-counts')), null, 'Blocked likes must not publish count overrides');
     await privateContext.close();
     await page.locator('#openNoteComposer').click();

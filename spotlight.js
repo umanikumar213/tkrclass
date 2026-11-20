@@ -214,15 +214,10 @@ router.get('/api/spotlight/students/:roll', validateRoll, identity, wrap(async (
   res.set('Cache-Control', 'no-store');
   const profile = hiddenRolls.has(req.roll) ? null : await publicProfile(req.roll);
   if (!profile) return res.status(404).json({ message: message(req, 'student_missing') });
-  const device = deviceHash(req.query.device_hash);
-  const settings = req.spotlightContent.settings;
   const [likes, reactions] = await Promise.all([
     pool.query(
-      `SELECT (COUNT(*) FILTER(WHERE voter_hash=$2)>0
-       OR COUNT(*) FILTER(WHERE ip_hash=$3)>=$4
-       OR COUNT(*) FILTER(WHERE $5::boolean AND device_hash=$6)>0) AS liked
-       FROM spotlight_likes WHERE roll_number=$1`,
-      [req.roll, req.voterHash, req.spotlightIp, settings.like_max_per_ip_per_profile, settings.like_device_check, device]),
+      `SELECT EXISTS(SELECT 1 FROM spotlight_likes WHERE roll_number=$1 AND voter_hash=$2) AS liked`,
+      [req.roll, req.voterHash]),
     pool.query(
       `SELECT r.note_id,r.emoji FROM spotlight_note_reactions r JOIN spotlight_notes n ON n.id=r.note_id
        WHERE n.roll_number=$1 AND n.status='approved' AND r.voter_hash=$2`, [req.roll, req.voterHash]),
@@ -242,15 +237,11 @@ router.post('/api/spotlight/students/:roll/like', validateRoll, identity,
     const old = await client.query('SELECT 1 FROM spotlight_likes WHERE roll_number=$1 AND voter_hash=$2', [req.roll, req.voterHash]);
     const liked = old.rows.length === 0;
     if (liked) {
-      if (settings.like_device_check && !device) fail(400, 'invalid_device');
-      const count = await client.query(
-        `SELECT COUNT(*) FILTER(WHERE ip_hash=$2)::INT AS total,
-         COUNT(*) FILTER(WHERE device_hash=$3)::INT AS devices
-         FROM spotlight_likes WHERE roll_number=$1`, [req.roll, req.spotlightIp, device]);
-      if (count.rows[0].total >= settings.like_max_per_ip_per_profile ||
-        (settings.like_device_check && count.rows[0].devices > 0)) {
-        const result = await client.query('SELECT like_count FROM spotlight_students WHERE roll_number=$1', [req.roll]);
-        return { blocked: true, liked: true, like_count: result.rows[0].like_count };
+      if (settings.like_device_check && device) {
+        const duplicate = await client.query(
+          'SELECT 1 FROM spotlight_likes WHERE roll_number=$1 AND ip_hash=$2 AND device_hash=$3 LIMIT 1',
+          [req.roll, req.spotlightIp, device]);
+        if (duplicate.rows.length) fail(409, 'like_blocked_device');
       }
       await client.query(
         'INSERT INTO spotlight_likes(roll_number,voter_hash,ip_hash,device_hash) VALUES($1,$2,$3,$4)',
@@ -262,7 +253,6 @@ router.post('/api/spotlight/students/:roll/like', validateRoll, identity,
       'UPDATE spotlight_students SET like_count=GREATEST(0,like_count+$2) WHERE roll_number=$1 RETURNING like_count', [req.roll, liked ? 1 : -1]);
     return { liked, like_count: rows[0].like_count };
   });
-  if (payload.blocked) return res.status(409).json({ message: message(req, 'like_already'), liked: true, like_count: payload.like_count });
   // Lists/leaderboards retain their 60/120-second caches; profile counts must be fresh.
   clearProfile(req.roll);
   res.json(payload);

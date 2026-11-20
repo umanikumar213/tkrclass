@@ -251,15 +251,23 @@
   };
   const getDeviceHash = async () => {
     if (!window.crypto?.subtle || !window.TextEncoder) throw new Error(t('device_hash_error'));
+    const resolved = Intl.DateTimeFormat().resolvedOptions();
     const fingerprint = [
       navigator.userAgent || '',
       screen.width,
       screen.height,
       window.devicePixelRatio || 1,
-      Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      resolved.timeZone || '',
       navigator.language || '',
       navigator.platform || '',
       navigator.hardwareConcurrency || 0,
+      screen.availWidth,
+      screen.availHeight,
+      screen.colorDepth,
+      navigator.deviceMemory || 0,
+      navigator.maxTouchPoints || 0,
+      resolved.calendar || '',
+      resolved.numberingSystem || '',
     ];
     const bytes = new TextEncoder().encode(JSON.stringify(fingerprint));
     const digest = await window.crypto.subtle.digest('SHA-256', bytes);
@@ -726,7 +734,6 @@
         if (like.disabled) return;
         like.disabled = true;
         try {
-           if (!deviceHash && spotlightSettings.like_device_check !== false) throw new Error(t('device_hash_error'));
            if (!deviceHash) deviceHash = await getDeviceHash().catch(() => null);
            const token = await acquireTurnstile();
            const body = { device_hash: deviceHash };
@@ -751,15 +758,13 @@
             setTimeout(() => burst.remove(), 700);
           }
          } catch (error) {
-           if (error.status === 409 && error.data?.liked) {
+           if (error.status === 409) {
              markLocallyVerified();
-             data.likedByMe = true;
-             studentData.like_count = Number(error.data.like_count ?? studentData.like_count) || 0;
-             like.classList.add('is-liked');
-             like.setAttribute('aria-pressed', 'true');
-             likeLabel.textContent = copyText('like_count_format', { emoji: t('like_emoji'), label: t('liked_label'), count: studentData.like_count });
-             like.setAttribute('aria-label', copyText('like_aria', { label: `${t('like_emoji')} ${t('liked_label')}`, count: studentData.like_count }));
-             $('profileLikeCount').textContent = String(studentData.like_count);
+             data.likedByMe = false;
+             like.classList.remove('is-liked');
+             like.setAttribute('aria-pressed', 'false');
+             likeLabel.textContent = copyText('like_count_format', { emoji: t('like_emoji'), label: t('like_label'), count: Number(studentData.like_count) || 0 });
+             like.setAttribute('aria-label', copyText('like_aria', { label: `${t('like_emoji')} ${t('like_label')}`, count: Number(studentData.like_count) || 0 }));
            }
            showToast(error.message || t('like_failed'));
         } finally { resetTurnstile(); like.disabled = false; }
